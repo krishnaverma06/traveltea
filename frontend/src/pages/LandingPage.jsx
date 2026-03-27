@@ -25,9 +25,9 @@ export default function LandingPage() {
               Plan Your <span className="text-foreground">Perfect Journey</span>
             </h1>
             <p className="text-muted-foreground text-lg md:text-xl">
-              Create personalized itineraries with real-time weather, optimal
-              routes, and local events. Let AI handle the details while you
-              dream about the adventure.
+              Build intelligent travel itineraries with AI. Get optimized
+              routes, weather insights, hotel suggestions, local events, and
+              personalized recommendations—all in one place.
             </p>
             <div className="flex justify-center gap-4">
               <Button asChild>
