@@ -22,7 +22,7 @@
   "license": "MIT",
   "dependencies": {
     "@langchain/core": "^0.3.0",
-    "@langchain/google-genai": "^0.1.0",
+    "@langchain/google-genai": "^0.1.12",
     "@langchain/langgraph": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "axios": "^1.7.0",

@@ -31,7 +31,7 @@ app.get('/health', (req, res) => {
 
 // Routes
 app.get('/api', (req, res) => {
-  res.json({ message: 'TripWhat API is running' });
+  res.json({ message: 'TravelTea API is running' });
 });
 
 // Socket.io connection handling
