@@ -67,21 +67,39 @@ export class TravelAgent {
   private graph: any; // LangGraph compiled graph
 
   constructor(config: AgentConfig = {}) {
-    // Initialize OpenAI model
+    // Initialize Gemini model
     this.model = new ChatGoogleGenerativeAI({
-        model: config.modelName || 'gemini-2.5-flash',
-        apiKey: process.env.GEMINI_API_KEY!,
-        temperature: config.temperature || 0.7,
-        maxOutputTokens: config.maxTokens || 1000,
+      model: config.modelName || process.env.GEMINI_MODEL || 'gemini-1.5-flash',
+      temperature: config.temperature || 0.7,
+      maxOutputTokens: config.maxTokens || 1000,
+      streaming: config.streaming || false,
+      apiKey: process.env.GEMINI_API_KEY,
     });
 
     // Build the LangGraph workflow
     this.graph = this.buildGraph();
   }
 
+private async invokeWithRetry(messages: BaseMessage[], maxRetries = 3): Promise<any> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await this.model.invoke(messages);
+    } catch (error: any) {
+      lastError = error;
+      const isRateLimit = error?.status === 429 || /rate.?limit|quota/i.test(error?.message || '');
+      if (!isRateLimit || attempt === maxRetries - 1) throw error;
+      const delayMs = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+      console.warn(`⏳ Rate limited, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise(res => setTimeout(res, delayMs));
+    }
+  }
+  throw lastError;
+}
   /**
    * Build the LangGraph state machine
-   */private buildGraph() {
+   */
+  private buildGraph() {
   // Define the graph with Annotation and use method chaining
   const workflow = new StateGraph(AgentStateAnnotation)
   .addNode('planner', this.plannerNode.bind(this))
@@ -114,6 +132,7 @@ return workflow.compile();
       ];
 
       const response = await this.model.invoke(messages);
+      
       const content = response.content as string;
 
       // Simple intent detection based on keywords
@@ -235,7 +254,8 @@ return workflow.compile();
           new HumanMessage(state.userQuery),
         ];
         console.log('🤖 [FORMATTER] Calling gemini-2.5-flash for conversational response...');
-        const response = await this.model.invoke(messages);
+        const response = await this.invokeWithRetry(messages);
+        
         formattedResponse = response.content as string;
       }
 
