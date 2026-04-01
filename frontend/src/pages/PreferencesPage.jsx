@@ -24,6 +24,16 @@ const PreferencesPage = () => {
   const [people, setPeople] = useState(tripData?.people || 1);
   const [travelType, setTravelType] = useState(tripData?.travelType || "");
 
+  // Update local state when tripData changes
+  React.useEffect(() => {
+    if (tripData?.people) {
+      setPeople(tripData.people);
+    }
+    if (tripData?.travelType) {
+      setTravelType(tripData.travelType);
+    }
+  }, [tripData?.people, tripData?.travelType]);
+
   const travelTypes = [
     {
       id: "leisure",
@@ -68,6 +78,11 @@ const PreferencesPage = () => {
       color: "indigo"
     }
   ];
+
+  const handleNext = () => {
+    updateTripData({ people, travelType });
+    navigate('/plan/budget');
+  };
 
   const getColorClasses = (color) => {
     const colors = {
@@ -123,9 +138,14 @@ const PreferencesPage = () => {
     return colors[color] || colors.blue;
   };
 
-  const handleNext = () => {
-    updateTripData({ people, travelType });
-    navigate('/plan/results');
+  const handlePeopleChange = (newPeople) => {
+    setPeople(newPeople);
+    updateTripData({ people: newPeople });
+  };
+
+  const handleTravelTypeChange = (type) => {
+    setTravelType(type);
+    updateTripData({ travelType: type });
   };
 
   const handleStepClick = (step) => {
@@ -133,11 +153,19 @@ const PreferencesPage = () => {
       case "destinations":
         navigate('/plan');
         break;
+      case "preferences":
+        // Already on preferences page
+        break;
       case "budget":
-        navigate('/plan/budget');
+        if (tripData?.cities?.length > 0 && tripData?.startDate && tripData?.people && tripData?.travelType) {
+          navigate('/plan/budget');
+        }
         break;
       case "results":
-        navigate('/plan/results');
+        if (tripData?.cities?.length > 0 && tripData?.startDate && 
+            tripData?.people && tripData?.travelType && tripData?.budget?.total) {
+          navigate('/plan/results');
+        }
         break;
       default:
         break;
@@ -186,7 +214,7 @@ const PreferencesPage = () => {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setPeople(Math.max(1, people - 1))}
+                onClick={() => handlePeopleChange(Math.max(1, people - 1))}
                 disabled={people <= 1}
                 className="h-12 w-12"
               >
@@ -199,7 +227,7 @@ const PreferencesPage = () => {
                   min="1"
                   max="20"
                   value={people}
-                  onChange={(e) => setPeople(Math.max(1, Number(e.target.value)))}
+                  onChange={(e) => handlePeopleChange(Math.max(1, Number(e.target.value)))}
                   className="text-center text-2xl font-bold h-12"
                 />
               </div>
@@ -207,7 +235,7 @@ const PreferencesPage = () => {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setPeople(Math.min(20, people + 1))}
+                onClick={() => handlePeopleChange(Math.min(20, people + 1))}
                 disabled={people >= 20}
                 className="h-12 w-12"
               >
@@ -246,7 +274,7 @@ const PreferencesPage = () => {
                         ? `${colors.selected} ring-2 ${colors.ring}` 
                         : `${colors.bg} ${colors.border} hover:shadow-lg`
                     }`}
-                    onClick={() => setTravelType(type.id)}
+                    onClick={() => handleTravelTypeChange(type.id)}
                   >
                     <div className="flex items-start gap-3">
                       <div className={`p-2 rounded-lg ${colors.bg}`}>
@@ -303,18 +331,18 @@ const PreferencesPage = () => {
           <div className="flex justify-between">
             <Button
               variant="outline"
-              onClick={() => navigate('/plan/budget')}
+              onClick={() => navigate('/plan')}
               className="px-8 py-3"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Budget
+              Back to Destinations
             </Button>
             <Button
               onClick={handleNext}
               disabled={!isComplete}
               className="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50"
             >
-              Continue to Results
+              Continue to Budget
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </div>
