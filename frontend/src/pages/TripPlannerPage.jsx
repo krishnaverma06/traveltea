@@ -53,7 +53,7 @@ const DashboardNav = () => {
               <MapPin className="w-5 h-5 text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-lg font-bold text-gray-900">TripWhat</span>
+              <span className="text-lg font-bold text-gray-900">TravelTea</span>
               <span className="text-[10px] text-gray-500 -mt-1">
                 Plan Smarter
               </span>
