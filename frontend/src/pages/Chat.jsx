@@ -148,7 +148,7 @@ export function Chat() {
 
             <div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                TripWhat
+                TravelTea
               </h1>
 
               <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">

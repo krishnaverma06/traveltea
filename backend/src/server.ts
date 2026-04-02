@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { connectDB } from './config/database.js';
 import chatRoutes from './routes/chat.js';
 import { setSocketIO } from './controllers/chatController.js';
+import authRoutes from "./routes/authRoutes.js";
 
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
@@ -48,6 +49,8 @@ app.get('/api', (req, res) => {
 
 // Chat routes
 app.use('/api/chat', chatRoutes);
+// Auth routes
+app.use('/api/auth', authRoutes);
 
 // Set Socket.io instance for chat controller
 setSocketIO(io);
