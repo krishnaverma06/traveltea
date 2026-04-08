@@ -92,7 +92,7 @@ export default function SignupPage() {
               Create Account
             </h1>
             <p className="text-gray-600 text-sm">
-              Join TripWhat and start planning your perfect journey
+              Join TravelTea and start planning your perfect journey
             </p>
           </div>
 

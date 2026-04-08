@@ -1,39 +1,60 @@
-import axios from 'axios';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import type {OpenTripMapPlace, PlaceDetails, Destination, GeoJSONFeatureCollection } from './types.js';
+import axios from "axios";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import type {
+  OpenTripMapPlace,
+  PlaceDetails,
+  Destination,
+  GeoJSONFeatureCollection,
+} from "./types.js";
 
 // Ensure environment variables are loaded
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
 // OpenTripMap API - Get free key at https://opentripmap.io/product
-const BASE_URL = 'https://api.opentripmap.com/0.1/en/places';
+const BASE_URL = "https://api.opentripmap.com/0.1/en/places";
 
 export class OpenTripMapAPI {
   private apiKey: string;
 
   constructor(apiKey?: string) {
     // Use provided key, environment variable, or warn
-    this.apiKey = apiKey || process.env.OPENTRIPMAP_API_KEY || '';
-    
-    console.log('[OpenTripMapAPI] Constructor called');
-    console.log('[OpenTripMapAPI] Provided key:', apiKey ? `${apiKey.substring(0, 10)}...` : 'undefined');
-    console.log('[OpenTripMapAPI] Env key:', process.env.OPENTRIPMAP_API_KEY ? `${process.env.OPENTRIPMAP_API_KEY.substring(0, 10)}...` : 'undefined');
-    console.log('[OpenTripMapAPI] Final key:', this.apiKey ? `${this.apiKey.substring(0, 10)}...` : 'EMPTY!');
-    
+    this.apiKey = apiKey || process.env.OPENTRIPMAP_API_KEY || "";
+
+    console.log("[OpenTripMapAPI] Constructor called");
+    console.log(
+      "[OpenTripMapAPI] Provided key:",
+      apiKey ? `${apiKey.substring(0, 10)}...` : "undefined",
+    );
+    console.log(
+      "[OpenTripMapAPI] Env key:",
+      process.env.OPENTRIPMAP_API_KEY
+        ? `${process.env.OPENTRIPMAP_API_KEY.substring(0, 10)}...`
+        : "undefined",
+    );
+    console.log(
+      "[OpenTripMapAPI] Final key:",
+      this.apiKey ? `${this.apiKey.substring(0, 10)}...` : "EMPTY!",
+    );
+
     if (!this.apiKey) {
-      console.warn('⚠️  OpenTripMap API key not found. Get your free key at https://opentripmap.io/product');
-      console.warn('   Add it to .env as OPENTRIPMAP_API_KEY=your_key_here');
+      console.warn(
+        "⚠️  OpenTripMap API key not found. Get your free key at https://opentripmap.io/product",
+      );
+      console.warn("   Add it to .env as OPENTRIPMAP_API_KEY=your_key_here");
     }
   }
 
   /**
    * Search for places by name/query
    */
-  async searchPlaces(query: string, limit: number = 10): Promise<Destination[]> {
+  async searchPlaces(
+    query: string,
+    limit: number = 10,
+  ): Promise<Destination[]> {
     try {
       // First, geocode the query to get coordinates
       const geoResponse = await axios.get(`${BASE_URL}/geoname`, {
@@ -56,7 +77,7 @@ export class OpenTripMapAPI {
           lon,
           lat,
           limit,
-          format: 'geojson',
+          format: "geojson",
           apikey: this.apiKey,
         },
       });
@@ -64,13 +85,13 @@ export class OpenTripMapAPI {
       const geoData = placesResponse.data as GeoJSONFeatureCollection;
 
       if (!geoData.features || !Array.isArray(geoData.features)) {
-        console.error('Unexpected response format:', geoData);
+        console.error("Unexpected response format:", geoData);
         return [];
       }
 
       return this.transformGeoJSONFeatures(geoData.features);
     } catch (error) {
-      console.error('OpenTripMap search error:', error);
+      console.error("OpenTripMap search error:", error);
       return [];
     }
   }
@@ -84,7 +105,7 @@ export class OpenTripMapAPI {
     lon: number,
     category: string,
     radius: number = 5000,
-    limit: number = 10
+    limit: number = 10,
   ): Promise<Destination[]> {
     try {
       const response = await axios.get(`${BASE_URL}/radius`, {
@@ -94,7 +115,7 @@ export class OpenTripMapAPI {
           lat,
           kinds: category, // e.g., 'museums', 'restaurants', 'natural'
           limit,
-          format: 'geojson',
+          format: "geojson",
           apikey: this.apiKey,
         },
       });
@@ -106,7 +127,7 @@ export class OpenTripMapAPI {
 
       return this.transformGeoJSONFeatures(geoData.features);
     } catch (error) {
-      console.error('OpenTripMap category search error:', error);
+      console.error("OpenTripMap category search error:", error);
       return [];
     }
   }
@@ -118,7 +139,7 @@ export class OpenTripMapAPI {
   async getItineraryPlaces(
     lat: number,
     lon: number,
-    radius: number = 5000
+    radius: number = 5000,
   ): Promise<{
     attractions: Destination[];
     restaurants: Destination[];
@@ -127,15 +148,21 @@ export class OpenTripMapAPI {
   }> {
     try {
       const [attractions, restaurants, nature, culture] = await Promise.all([
-        this.searchByCategory(lat, lon, 'interesting_places', radius, 10),
-        this.searchByCategory(lat, lon, 'foods', radius, 5),
-        this.searchByCategory(lat, lon, 'natural', radius, 5),
-        this.searchByCategory(lat, lon, 'cultural,museums,theatres_and_entertainments', radius, 8),
+        this.searchByCategory(lat, lon, "interesting_places", radius, 10),
+        this.searchByCategory(lat, lon, "foods", radius, 5),
+        this.searchByCategory(lat, lon, "natural", radius, 5),
+        this.searchByCategory(
+          lat,
+          lon,
+          "cultural,museums,theatres_and_entertainments",
+          radius,
+          8,
+        ),
       ]);
 
       return { attractions, restaurants, nature, culture };
     } catch (error) {
-      console.error('OpenTripMap itinerary places error:', error);
+      console.error("OpenTripMap itinerary places error:", error);
       return { attractions: [], restaurants: [], nature: [], culture: [] };
     }
   }
@@ -154,13 +181,13 @@ export class OpenTripMapAPI {
       const details = response.data as PlaceDetails;
 
       if (!details) {
-        console.error('Unexpected response format:', details);
+        console.error("Unexpected response format:", details);
         return null;
       }
 
       return details;
     } catch (error) {
-      console.error('OpenTripMap details error:', error);
+      console.error("OpenTripMap details error:", error);
       return null;
     }
   }
@@ -173,7 +200,7 @@ export class OpenTripMapAPI {
     lon: number,
     radius: number = 3000,
     limit: number = 20,
-    kinds?: string
+    kinds?: string,
   ): Promise<Destination[]> {
     try {
       const response = await axios.get(`${BASE_URL}/radius`, {
@@ -182,7 +209,7 @@ export class OpenTripMapAPI {
           lon,
           lat,
           limit,
-          format: 'geojson',
+          format: "geojson",
           apikey: this.apiKey,
         },
       });
@@ -190,13 +217,13 @@ export class OpenTripMapAPI {
       const geoData = response.data as GeoJSONFeatureCollection;
 
       if (!geoData.features || !Array.isArray(geoData.features)) {
-        console.error('Unexpected response format:', geoData);
+        console.error("Unexpected response format:", geoData);
         return [];
       }
 
       return this.transformGeoJSONFeatures(geoData.features);
     } catch (error) {
-      console.error('OpenTripMap nearby error:', error);
+      console.error("OpenTripMap nearby error:", error);
       return [];
     }
   }
@@ -204,9 +231,14 @@ export class OpenTripMapAPI {
   /**
    * Transform GeoJSON features to our destination format
    */
-  private transformGeoJSONFeatures(features: GeoJSONFeatureCollection['features']): Destination[] {
+  private transformGeoJSONFeatures(
+    features: GeoJSONFeatureCollection["features"],
+  ): Destination[] {
     return features
-      .filter((feature) => feature.properties.name && feature.properties.name.trim() !== '')
+      .filter(
+        (feature) =>
+          feature.properties.name && feature.properties.name.trim() !== "",
+      )
       .map((feature) => ({
         id: feature.properties.xid,
         name: feature.properties.name,
@@ -214,7 +246,9 @@ export class OpenTripMapAPI {
           latitude: feature.geometry.coordinates[1], // GeoJSON is [lon, lat]
           longitude: feature.geometry.coordinates[0],
         },
-        category: feature.properties.kinds ? feature.properties.kinds.split(',') : [],
+        category: feature.properties.kinds
+          ? feature.properties.kinds.split(",")
+          : [],
         distance: feature.properties.dist,
         rating: feature.properties.rate,
       }));
@@ -225,7 +259,7 @@ export class OpenTripMapAPI {
    */
   async getEnrichedPlaceDetails(xid: string): Promise<Destination | null> {
     const details = await this.getPlaceDetails(xid);
-    
+
     if (!details) {
       return null;
     }
@@ -238,7 +272,7 @@ export class OpenTripMapAPI {
         latitude: details.point.lat,
         longitude: details.point.lon,
       },
-      category: details.kinds ? details.kinds.split(',') : [],
+      category: details.kinds ? details.kinds.split(",") : [],
       rating: details.rate,
       image: details.preview?.source || details.image,
     };
@@ -251,7 +285,7 @@ let _openTripMapAPIInstance: OpenTripMapAPI | null = null;
 export function getOpenTripMapAPI(): OpenTripMapAPI {
   if (!_openTripMapAPIInstance) {
     // Explicitly pass API key from environment
-    const apiKey = process.env.OPENTRIPMAP_API_KEY || '';
+    const apiKey = process.env.OPENTRIPMAP_API_KEY || "";
     _openTripMapAPIInstance = new OpenTripMapAPI(apiKey);
   }
   return _openTripMapAPIInstance;
