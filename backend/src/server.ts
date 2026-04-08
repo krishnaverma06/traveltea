@@ -20,7 +20,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 console.log('🔑 Environment check:');
 console.log('  - GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ Loaded' : '❌ Missing');
 console.log('  - OPENTRIPMAP_API_KEY:', process.env.OPENTRIPMAP_API_KEY ? '✅ Loaded' : '❌ Missing');
-
+console.log('  - SERP_API_KEY:', process.env.SERPAPI_API_KEY ? "✅ Loaded" : "Missing");
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
