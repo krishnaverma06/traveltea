@@ -109,7 +109,7 @@ const ResultsPage = () => {
   }, []); // Only run once on mount
 
   const handleGoToChat = () => {
-    navigate("/plan/chat");
+    navigate("/chat");
   };
 
   const handleStepClick = (step) => {

@@ -12,7 +12,7 @@ import { Plane, MapPin } from "lucide-react";
 const API_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-export function Chat() {
+export default function Chat() {
   const [conversationId, setConversationId] = useState();
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
