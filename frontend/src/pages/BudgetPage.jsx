@@ -266,10 +266,15 @@ const BudgetPage = () => {
   };
 
   const handleNext = () => {
-    if (isBudgetValid()) {
-      navigate('/plan/results');
-    }
-  };
+  if (!isBudgetValid()) return;
+
+  updateTripData({
+    budget: budgetMode === "capped" ? cappedBudget : flexibleBudget,
+    budgetMode,
+  });
+
+  navigate("/plan/results");
+};
 
   const handleStepClick = (step) => {
     switch (step) {
