@@ -174,6 +174,7 @@ export function Chat() {
   }, [messages]);
 
   const handleSendMessage = async (message) => {
+    //Add user message immediately
     const userMessage = {
       role: "user",
       content: message,
@@ -184,14 +185,24 @@ export function Chat() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post(
-        `${API_URL}/api/chat`,
-        {
-          message,
-          conversationId,
-        }
-      );
 
+      const token = localStorage.getItem('traveltea_token');
+      
+      if (!token) {
+        throw new Error('Not authenticated. Please log in.');
+      }
+
+      const response = await axios.post(`${API_URL}/api/chat`, {
+        message,
+        conversationId,
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      // Set conversation ID if this is the first message
       if (
         !conversationId &&
         response.data.conversationId
@@ -200,11 +211,25 @@ export function Chat() {
           response.data.conversationId
         );
       }
+      // Note: AI response will come via Socket.io
+      // The axios response is just for confirmation
     } catch (error) {
       console.error(
         "Send message error:",
         error
       );
+
+      let errorMessage = 'Sorry, I had trouble processing your message. Please try again.';
+      
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          errorMessage = 'Please log in to continue chatting.';
+        } else if (error.response?.data?.error) {
+          errorMessage = error.response.data.error;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
 
       setMessages((prev) => [
         ...prev,
