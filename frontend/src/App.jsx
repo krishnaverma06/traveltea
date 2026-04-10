@@ -12,12 +12,13 @@ import TripPlannerPage from "./pages/TripPlannerPage.jsx";
 import BudgetPage from "./pages/BudgetPage.jsx";
 import PreferencesPage from "./pages/PreferencesPage.jsx";
 import ResultsPage from "./pages/ResultsPage.jsx";
-import TripDetailsPage from "./pages/TripDetailsPage.jsx";
 import Chat  from "./pages/Chat";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import OnboardingPage from "./pages/OnboardingPage"
 import Home from "./pages/Home"
+import ItineraryPage from "./pages/ItinearyPage";
+
 const ProtectedRoute = ({
   children,
   condition = true,
@@ -96,14 +97,14 @@ const AppContent = () => {
             </ProtectedRoute>
           } 
         />
-        <Route 
+        {/* <Route 
           path="/plan/details" 
           element={
             <ProtectedRoute condition={tripData?.selectedTrip}>
               <TripDetailsPage />
             </ProtectedRoute>
           } 
-        />
+        /> */}
          <Route
           path="/home"
           element={
@@ -146,6 +147,15 @@ const AppContent = () => {
             </PublicRoute>
           }
         />
+        <Route
+          path="/itinerary"
+          element={
+            <ProtectedRoute>
+              <ItineraryPage />
+            </ProtectedRoute>
+          }
+        />
+
       </Routes>
     </Router>
   );

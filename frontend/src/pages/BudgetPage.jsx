@@ -324,12 +324,12 @@ const BudgetPage = () => {
               </div>
               
               {/* Budget Mode Toggle */}
-              <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200">
+              <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-300 shadow-sm">
                 <Button
                   variant={budgetMode === 'capped' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => handleBudgetModeChange('capped')}
-                  className="text-sm"
+                  className={`text-sm font-medium ${budgetMode === 'capped' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'border-blue-600 text-blue-600 hover:bg-blue-50'}`}
                 >
                   Capped Budget
                 </Button>
@@ -337,7 +337,7 @@ const BudgetPage = () => {
                   variant={budgetMode === 'flexible' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => handleBudgetModeChange('flexible')}
-                  className="text-sm"
+                  className={`text-sm font-medium ${budgetMode === 'flexible' ? 'bg-green-600 hover:bg-green-700 text-white' : 'border-green-600 text-green-600 hover:bg-green-50'}`}
                 >
                   Flexible Budget
                 </Button>
@@ -413,7 +413,7 @@ const BudgetPage = () => {
                 variant="outline"
                 size="sm"
                 onClick={resetToBalanced}
-                className="text-sm"
+                className="text-sm font-medium border-purple-500 text-purple-600 hover:bg-purple-50"
               >
                 Reset to Balanced
               </Button>
@@ -611,9 +611,9 @@ const BudgetPage = () => {
             <Button
               onClick={handleNext}
               disabled={!isBudgetValid()}
-              className={`px-8 py-3 ${
+              className={`px-8 py-3 font-medium shadow-md ${
                 isBudgetValid()
-                  ? 'bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white'
+                  ? 'bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
             >
