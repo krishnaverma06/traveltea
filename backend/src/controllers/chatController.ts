@@ -94,7 +94,8 @@ export async function sendMessage(req: Request, res: Response) {
     if (io) {
       io.to(convId).emit('agent:response', {
         message: aiResponse,
-        conversationId: convId
+        conversationId: convId,
+        itinerary: agentResult.itinerary
       });
       console.log('✅ [SOCKET] Event emitted successfully');
     } else {

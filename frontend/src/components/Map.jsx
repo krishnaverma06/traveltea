@@ -42,8 +42,22 @@ function MapUpdater({ locations }) {
   return null;
 }
 
+// Pans/zooms to a single location without disturbing the other markers
+function MapFocus({ focus }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (focus) {
+      map.flyTo([focus.lat, focus.lon], 16);
+    }
+  }, [focus, map]);
+
+  return null;
+}
+
 export function Map({
   locations,
+  focus,
   center = [48.8566, 2.3522],
   zoom = 13,
 }) {
@@ -91,6 +105,7 @@ export function Map({
         ))}
 
         <MapUpdater locations={locations} />
+        <MapFocus focus={focus} />
       </MapContainer>
     </div>
   );
