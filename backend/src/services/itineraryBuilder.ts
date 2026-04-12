@@ -8,8 +8,32 @@ import type { Itinerary, DayPlan, TimeSlot, Activity, TripMetadata } from '../ty
 import type { Destination } from '../mcp-servers/places/types.js';
 import { getOpenTripMapAPI } from '../mcp-servers/places/api.js';
 
+const MAX_IMAGE_ENRICHMENTS_PER_ITINERARY = 12;
+
 export class ItineraryBuilder {
   private openTripMapAPI = getOpenTripMapAPI();
+
+  /**
+   * Replace fake generated image URLs with real place photos where
+   * available (capped, since each lookup is a separate API call). Activities
+   * with no real photo are left with an empty imageUrl for the frontend to
+   * show a placeholder instead of a fake/generic stock photo.
+   */
+  private async enrichItineraryImages(itinerary: Itinerary): Promise<Itinerary> {
+    const activities = itinerary.days
+      .flatMap((day) => day.timeSlots.flatMap((slot) => slot.activities))
+      .filter((activity) => activity.xid)
+      .slice(0, MAX_IMAGE_ENRICHMENTS_PER_ITINERARY);
+
+    await Promise.all(
+      activities.map(async (activity) => {
+        const details = await this.openTripMapAPI.getEnrichedPlaceDetails(activity.xid as string);
+        activity.imageUrl = details?.image || '';
+      }),
+    );
+
+    return itinerary;
+  }
 
   /**
    * Build a complete itinerary for a destination
@@ -61,7 +85,7 @@ export class ItineraryBuilder {
       };
 
       console.log(`🎉 [ITINERARY] Successfully built ${duration}-day itinerary with ${days.length} days`);
-      return itinerary;
+      return await this.enrichItineraryImages(itinerary);
     } catch (error) {
       console.error('Itinerary builder error:', error);
       return null;
@@ -132,7 +156,7 @@ export class ItineraryBuilder {
       };
 
       console.log(`🎉 [CONTEXT ITINERARY] Successfully built itinerary`);
-      return itinerary;
+      return await this.enrichItineraryImages(itinerary);
     } catch (error) {
       console.error('Context itinerary builder error:', error);
       return null;
@@ -213,7 +237,7 @@ export class ItineraryBuilder {
       };
 
       console.log(`🎉 [OPTIMIZED ITINERARY] Successfully built itinerary for ${destination}`);
-      return itinerary;
+      return await this.enrichItineraryImages(itinerary);
     } catch (error) {
       console.error('Optimized itinerary builder error:', error);
       return null;
@@ -833,60 +857,13 @@ export class ItineraryBuilder {
   }
 
   /**
-   * Generate highly accurate and fast-loading image URLs for activities
+   * Use a real photo if OpenTripMap already gave us one on the destination;
+   * otherwise leave empty so the frontend shows a placeholder instead of a
+   * generic/fake stock photo. Real per-place enrichment happens afterwards
+   * in enrichItineraryImages (capped, since it's a separate API call).
    */
   private generateImageUrl(destination: Destination): string {
-    console.log('🖼️ [IMAGE] Generating accurate image URL for:', destination.name, 'category:', destination.category);
-    
-    // Use existing image if available
-    if (destination.image && destination.image !== '') {
-      console.log('🖼️ [IMAGE] Using existing image:', destination.image);
-      return destination.image;
-    }
-
-    // Enhanced image generation based on place name and category
-    const placeName = destination.name.toLowerCase();
-    const category = destination.category[0]?.toLowerCase() || 'travel';
-    
-    // Specific place-based image queries for better accuracy
-    let imageQuery = '';
-    
-    if (placeName.includes('museum') || category.includes('museum')) {
-      imageQuery = 'museum-interior-art-exhibits-gallery';
-    } else if (placeName.includes('park') || placeName.includes('garden') || category.includes('park')) {
-      imageQuery = 'beautiful-city-park-green-nature';
-    } else if (placeName.includes('church') || placeName.includes('cathedral') || category.includes('church')) {
-      imageQuery = 'historic-church-cathedral-architecture';
-    } else if (placeName.includes('tower') || placeName.includes('monument') || category.includes('monument')) {
-      imageQuery = 'historic-tower-monument-architecture';
-    } else if (placeName.includes('restaurant') || placeName.includes('cafe') || category.includes('restaurant')) {
-      imageQuery = 'elegant-restaurant-dining-atmosphere';
-    } else if (placeName.includes('market') || placeName.includes('shopping') || category.includes('shopping')) {
-      imageQuery = 'vibrant-market-shopping-colorful';
-    } else if (placeName.includes('bridge') || category.includes('bridge')) {
-      imageQuery = 'beautiful-city-bridge-architecture';
-    } else if (placeName.includes('square') || placeName.includes('plaza')) {
-      imageQuery = 'city-square-plaza-urban-architecture';
-    } else if (placeName.includes('hotel') || category.includes('hotel')) {
-      imageQuery = 'luxury-hotel-elegant-interior';
-    } else if (placeName.includes('beach') || placeName.includes('ocean') || category.includes('beach')) {
-      imageQuery = 'pristine-beach-ocean-paradise';
-    } else if (placeName.includes('mountain') || placeName.includes('hill') || category.includes('natural')) {
-      imageQuery = 'mountain-landscape-scenic-nature';
-    } else if (placeName.includes('library') || category.includes('library')) {
-      imageQuery = 'beautiful-library-books-architecture';
-    } else if (placeName.includes('theater') || placeName.includes('theatre') || category.includes('theatre')) {
-      imageQuery = 'elegant-theater-performance-interior';
-    } else {
-      // Generic high-quality travel image
-      imageQuery = 'beautiful-travel-destination-landmark';
-    }
-    
-    // Use optimized parameters for faster loading and better quality
-    const imageUrl = `https://source.unsplash.com/800x600/?${imageQuery}&auto=format&fit=crop&w=800&h=600&q=80`;
-    console.log('🖼️ [IMAGE] Generated accurate URL:', imageUrl);
-    
-    return imageUrl;
+    return destination.image || '';
   }
 
   /**

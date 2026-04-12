@@ -12,6 +12,8 @@ import authRoutes from "./routes/authRoutes.js";
 import tripRoutes from "./routes/tripRoutes.js";
 import itineraryRoutes from './routes/itinerary.js';
 import savedTripRoutes from './routes/savedTripRoutes.js'
+import searchRoutes from './routes/searchRoutes.js'
+import exploreRoutes from './routes/exploreRoutes.js'
 
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
@@ -61,6 +63,8 @@ app.use('/api/itinerary', itineraryRoutes);
 app.use('/api/auth', authRoutes);
 app.use("/api/trips", tripRoutes);
 app.use("/api/saved-trips", savedTripRoutes);
+app.use("/api/search", searchRoutes);
+app.use("/api/explore", exploreRoutes);
 
 // Set Socket.io instance for chat controller
 setSocketIO(io);
