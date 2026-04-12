@@ -18,6 +18,7 @@ import SignupPage from "./pages/SignupPage";
 import OnboardingPage from "./pages/OnboardingPage"
 import Home from "./pages/Home"
 import ItineraryPage from "./pages/ItinearyPage";
+import SavedTripsPage from "./pages/SavedTripsPage";
 
 const ProtectedRoute = ({
   children,
@@ -94,6 +95,14 @@ const AppContent = () => {
               }
             >
               <ResultsPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/saved-trips" 
+          element={
+            <ProtectedRoute>
+              <SavedTripsPage />
             </ProtectedRoute>
           } 
         />

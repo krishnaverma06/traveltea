@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -109,10 +109,20 @@ const DashboardNav = () => {
             </Button>
             <Button
               variant="ghost"
-              className="text-gray-600 hover:text-white hover:bg-gradient-to-r hover:from-blue-500/90 hover:to-pink-500/90 hover:backdrop-blur-sm px-4 py-2 transition-all duration-300"
+              className="text-gray-600 hover:text-white hover:bg-gradient-to-r hover:from-pink-500/90 hover:to-blue-500/90 hover:backdrop-blur-sm px-4 py-2 transition-all duration-300"
             >
-              Saved
+              <Link to="/saved-trips">Saved Trips</Link>
             </Button>
+             {/* Navigation Links */}
+            {/* <div className="hidden md:flex items-center gap-6"> */}
+            {/* <Link
+              to="/plan"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Plan
+            </Link> */}
+
+            {/* </div> */}
 
             {isAuthenticated && (
               <div className="ml-4">
@@ -638,23 +648,25 @@ export default function TripPlannerPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <TripPlanningSidebar
-        currentStep="destinations"
-        onStepClick={handleStepClick}
-        tripData={tripData}
-      />
+    <div className="min-h-screen bg-gray-50">
+      <DashboardNav />
+      <div className="flex">
+        <TripPlanningSidebar
+          currentStep="destinations"
+          onStepClick={handleStepClick}
+          tripData={tripData}
+        />
 
-      <div className="flex-1">
-        <DashboardNav />
-        <main className="container mx-auto px-4 py-8 max-w-6xl">
-          <QuickStats />
-          <TripBuilder
-            onStartPlanning={handleStartPlanning}
-            tripData={tripData}
-            updateTripData={updateTripData}
-          />
-        </main>
+        <div className="flex-1">
+          <main className="container mx-auto px-4 py-8 max-w-6xl">
+            <QuickStats />
+            <TripBuilder
+              onStartPlanning={handleStartPlanning}
+              tripData={tripData}
+              updateTripData={updateTripData}
+            />
+          </main>
+        </div>
       </div>
     </div>
   );

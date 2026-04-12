@@ -12,7 +12,10 @@ import { Plane, MapPin } from "lucide-react";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function Chat() {
-  const [conversationId, setConversationId] = useState();
+  // Generate the conversation id up front so the socket joins this
+  // conversation's room before the first message is ever sent — otherwise
+  // the very first agent:response would be emitted before we could join.
+  const [conversationId, setConversationId] = useState(() => crypto.randomUUID());
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);

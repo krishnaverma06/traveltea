@@ -8,6 +8,7 @@ export interface IMessage {
 
 export interface IConversation extends Document {
   conversationId: string;
+  user: mongoose.Types.ObjectId;
   messages: IMessage[];
   metadata: {
     destination?: string;
@@ -45,6 +46,12 @@ const ConversationSchema = new Schema<IConversation>(
       type: String,
       required: true,
       unique: true,
+      index: true,
+    },
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
       index: true,
     },
     messages: [MessageSchema],

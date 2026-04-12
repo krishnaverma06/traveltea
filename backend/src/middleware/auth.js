@@ -1,6 +1,5 @@
 import jwt from "jsonwebtoken";
-
-const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_me";
+import { JWT_SECRET } from "../config/configenv.js";
 
 export default function auth(req, res, next) {
   const authHeader = req.headers.authorization || "";
