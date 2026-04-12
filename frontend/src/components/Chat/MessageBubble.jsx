@@ -1,5 +1,47 @@
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import { User, Bot, Calendar } from "lucide-react";
+
+const REVEAL_TICKS = 40;
+const REVEAL_INTERVAL_MS = 20;
+
+const markdownComponents = {
+  h1: ({ children }) => (
+    <h1 className="text-base font-bold mt-1 mb-1.5">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="text-sm font-bold mt-3 mb-1">{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>
+  ),
+  p: ({ children }) => (
+    <p className="text-sm leading-relaxed mb-1 last:mb-0">{children}</p>
+  ),
+  strong: ({ children }) => (
+    <strong className="font-semibold">{children}</strong>
+  ),
+  ul: ({ children }) => (
+    <ul className="text-sm list-disc pl-4 mb-1 space-y-0.5">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="text-sm list-decimal pl-4 mb-1 space-y-0.5">{children}</ol>
+  ),
+  li: ({ children }) => <li>{children}</li>,
+  hr: () => <hr className="my-2 border-current opacity-20" />,
+  a: ({ children, href }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="underline underline-offset-2"
+    >
+      {children}
+    </a>
+  ),
+};
 
 export function MessageBubble({
   role,
@@ -9,7 +51,36 @@ export function MessageBubble({
   onViewItinerary,
 }) {
   const isUser = role === "user";
-  const hasItinerary = !isUser && !!itinerary;
+  const [displayedContent, setDisplayedContent] = useState(
+    isUser ? content : "",
+  );
+
+  // Simulate a streaming reveal for assistant messages: the full text is
+  // already available (it's built server-side, not token-streamed), so we
+  // just reveal it progressively for a live "typing" feel.
+  useEffect(() => {
+    if (isUser || !content) return;
+
+    let i = 0;
+    const chunkSize = Math.max(1, Math.ceil(content.length / REVEAL_TICKS));
+
+    setDisplayedContent("");
+
+    const interval = setInterval(() => {
+      i += chunkSize;
+      if (i >= content.length) {
+        setDisplayedContent(content);
+        clearInterval(interval);
+      } else {
+        setDisplayedContent(content.slice(0, i));
+      }
+    }, REVEAL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [content, isUser]);
+
+  const isRevealDone = displayedContent.length >= content.length;
+  const hasItinerary = !isUser && !!itinerary && isRevealDone;
 
   return (
     <motion.div
@@ -42,7 +113,20 @@ export function MessageBubble({
               : "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
           }`}
         >
-          <p className="text-sm whitespace-pre-wrap break-words">{content}</p>
+          {isUser ? (
+            <p className="text-sm whitespace-pre-wrap break-words">
+              {content}
+            </p>
+          ) : (
+            <div className="break-words">
+              <ReactMarkdown
+                remarkPlugins={[remarkBreaks]}
+                components={markdownComponents}
+              >
+                {displayedContent}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
 
         {/* Timestamp */}
