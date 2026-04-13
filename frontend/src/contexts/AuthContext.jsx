@@ -98,11 +98,16 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const updateUser = (updatedFields) => {
+    setUser((prev) => (prev ? { ...prev, ...updatedFields } : prev));
+  };
+
   const value = {
     user,
     login,
     signup,
     logout,
+    updateUser,
     loading,
     isAuthenticated: !!user,
   };
