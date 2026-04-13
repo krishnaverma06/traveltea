@@ -1,10 +1,23 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import SavedTrip from "../models/SavedTrip.js";
 import { JWT_SECRET, JWT_EXPIRES_IN } from "../config/configenv.js";
 console.log("✅ authController loaded");
 
 function generateToken(userId) {
   return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+}
+
+function serializeUser(user) {
+  return {
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    bio: user.bio,
+    notifications: user.notifications,
+    preferences: user.preferences,
+    createdAt: user.createdAt,
+  };
 }
 
 export const register = async (req, res) => {
@@ -68,11 +81,9 @@ export const login = async (req, res) => {
 
 export const me = async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select("_id name email");
+    const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ message: "User not found" });
-    return res.json({
-      user: { id: user._id, name: user.name, email: user.email },
-    });
+    return res.json({ user: serializeUser(user) });
   } catch (err) {
     console.log(err);
     return res
@@ -84,29 +95,63 @@ export const me = async (req, res) => {
 export const updatePreferences = async (req, res) => {
   try {
     const { budget, travelStyle, interests } = req.body;
-    
+
     const user = await User.findByIdAndUpdate(
       req.userId,
-      { 
-        preferences: { budget, travelStyle, interests }
+      {
+        preferences: { budget, travelStyle, interests },
       },
       { new: true }
-    ).select("_id name email preferences");
-    
+    );
+
     if (!user) return res.status(404).json({ message: "User not found" });
-    
-    return res.json({
-      user: { 
-        id: user._id, 
-        name: user.name, 
-        email: user.email,
-        preferences: user.preferences
-      },
-    });
+
+    return res.json({ user: serializeUser(user) });
   } catch (err) {
     console.log(err);
     return res
       .status(500)
       .json({ message: "Failed to update preferences", error: err.message });
+  }
+};
+
+export const updateProfile = async (req, res) => {
+  try {
+    const { name, bio, notifications } = req.body;
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (bio !== undefined) updates.bio = bio;
+    if (notifications !== undefined) updates.notifications = notifications;
+
+    const user = await User.findByIdAndUpdate(req.userId, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    return res.json({ user: serializeUser(user) });
+  } catch (err) {
+    console.log(err);
+    return res
+      .status(500)
+      .json({ message: "Failed to update profile", error: err.message });
+  }
+};
+
+export const deleteAccount = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    await SavedTrip.deleteMany({ user: req.userId });
+    await User.findByIdAndDelete(req.userId);
+
+    return res.json({ message: "Account deleted successfully" });
+  } catch (err) {
+    console.log(err);
+    return res
+      .status(500)
+      .json({ message: "Failed to delete account", error: err.message });
   }
 };
