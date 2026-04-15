@@ -1,5 +1,8 @@
+import mongoose from "mongoose";
 import SavedTrip from "../models/SavedTrip.js";
 import { getOpenTripMapAPI } from "../mcp-servers/places/api.js";
+import { generateEmbedding, buildTripSummary } from "../services/embedding.js";
+import { ingestTripKnowledge, deleteTripKnowledge } from "../vector/services/trip-knowledge.service.js";
 
 // Escape regex metacharacters so user-supplied search text can't be used
 // to build unexpected/expensive patterns.
@@ -79,6 +82,26 @@ export const saveTrip = async (req, res) => {
     });
 
     await savedTrip.save();
+
+    // Fire-and-forget: generate embedding for semantic search
+    (async () => {
+      try {
+        const summary = buildTripSummary(savedTrip);
+        const embedding = await generateEmbedding(summary);
+        await SavedTrip.updateOne(
+          { _id: savedTrip._id },
+          { $set: { embedding, searchSummary: summary } }
+        );
+        console.log(`🔍 Embedding indexed for trip ${savedTrip._id}`);
+      } catch (err) {
+        console.error('⚠️ Embedding generation failed (trip still saved):', err.message);
+      }
+
+      // Fire-and-forget: ingest rich trip knowledge into vector semantic layer
+      ingestTripKnowledge(savedTrip, req.userId).catch(err => 
+        console.error('⚠️ Trip vector ingestion failed:', err.message)
+      );
+    })();
 
     res.status(201).json({
       message: "Trip saved successfully",
@@ -218,6 +241,9 @@ export const deleteSavedTrip = async (req, res) => {
     res.json({
       message: "Trip deleted successfully",
     });
+
+    // Fire-and-forget: delete trip knowledge from vector semantic layer
+    deleteTripKnowledge(id).catch(() => {});
   } catch (error) {
     console.error("Error deleting saved trip:", error);
     res.status(500).json({
@@ -260,5 +286,79 @@ export const checkTripSaved = async (req, res) => {
       error: "Failed to check trip status",
       details: error.message,
     });
+  }
+};
+
+// Semantic search across saved trips using Atlas Vector Search
+export const semanticSearchTrips = async (req, res) => {
+  try {
+    const query = (req.query.q || "").trim();
+    if (!query) {
+      return res.json({ savedTrips: [] });
+    }
+
+    // 1. Embed the search query
+    const queryEmbedding = await generateEmbedding(query);
+
+    // 2. Atlas $vectorSearch aggregation
+    const results = await SavedTrip.aggregate([
+      {
+        $vectorSearch: {
+          index: "trip_semantic_search",
+          path: "embedding",
+          queryVector: queryEmbedding,
+          numCandidates: 50,
+          limit: 20,
+          filter: {
+            user: new mongoose.Types.ObjectId(req.userId),
+          },
+        },
+      },
+      {
+        $addFields: { score: { $meta: "vectorSearchScore" } },
+      },
+      {
+        $match: { score: { $gte: 0.65 } } // Filter out low-relevance matches
+      },
+      {
+        // Exclude the large embedding array from results
+        $project: { embedding: 0 },
+      },
+    ]);
+
+    console.log(
+      `🔍 Semantic search for "${query}" → ${results.length} results (user: ${req.userId})`
+    );
+
+    res.json({ savedTrips: results });
+  } catch (error) {
+    console.error("Error in semantic search:", error);
+
+    // Fallback to regex search if vector search fails
+    // (e.g., index not yet created, or no embeddings yet)
+    try {
+      const safeQuery = escapeRegex(req.query.q || "");
+      const fallbackResults = await SavedTrip.find({
+        user: req.userId,
+        $or: [
+          { title: { $regex: safeQuery, $options: "i" } },
+          { description: { $regex: safeQuery, $options: "i" } },
+          { tags: { $in: [new RegExp(safeQuery, "i")] } },
+          { "cities.name": { $regex: safeQuery, $options: "i" } },
+        ],
+      })
+        .sort({ createdAt: -1 })
+        .limit(20);
+
+      console.log(
+        `🔍 Semantic search fallback (regex) → ${fallbackResults.length} results`
+      );
+      return res.json({ savedTrips: fallbackResults, fallback: true });
+    } catch (fallbackError) {
+      res.status(500).json({
+        error: "Failed to search trips",
+        details: error.message,
+      });
+    }
   }
 };

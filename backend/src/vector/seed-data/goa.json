@@ -1,0 +1,184 @@
+[
+  {
+    "title": "Goa — Beach Paradise of India",
+    "category": "destination",
+    "subtype": "state",
+    "country": "India",
+    "city": "Goa",
+    "tags": ["beach", "nightlife", "Portuguese", "coastal", "tropical", "party", "relaxation"],
+    "content": "Goa, India's smallest state on the western coast, is the country's premier beach destination. Known for its Portuguese colonial heritage, palm-fringed beaches, vibrant nightlife, and laid-back atmosphere, Goa attracts millions of domestic and international tourists annually. The state is divided into North Goa (party beaches, hostels, and nightlife) and South Goa (quieter, more upscale resorts and pristine beaches). Goa's cuisine is a unique blend of Indian and Portuguese flavors, with seafood as the star. The state has over 50 beaches, 400-year-old churches, spice plantations, wildlife sanctuaries, and a thriving arts scene. Goa is served by Dabolim International Airport and an upcoming Mopa International Airport. Best visited from November to February for pleasant weather.",
+    "metadata": {
+      "coordinates": { "lat": 15.2993, "lon": 74.124 },
+      "currency": "INR",
+      "languages": ["Konkani", "English", "Hindi", "Portuguese"],
+      "bestTimeToVisit": ["November", "December", "January", "February"],
+      "population": 1459000,
+      "travelTypes": ["leisure", "adventure", "solo", "family"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Baga Beach",
+    "category": "attraction",
+    "subtype": "beach",
+    "country": "India",
+    "city": "Goa",
+    "tags": ["beach", "nightlife", "water sports", "north goa", "shacks", "party"],
+    "content": "Baga Beach in North Goa is one of the most popular and energetic beaches in the state. Named after the Baga creek that flows into the Arabian Sea at the northern end, the beach is famous for its vibrant nightlife (Tito's Lane is just steps away), water sports (parasailing, jet skiing, banana boat rides), and beach shacks serving fresh seafood with beer. The beach is busiest from November to February. Sunbeds and umbrellas are available for rent (₹200-500). Baga merges seamlessly into Calangute Beach to the south, creating a long stretch of sand. Saturday night markets at nearby Arpora are a must-visit for shopping and live music. Best avoided during monsoon (June–September) when the sea is rough and shacks are closed.",
+    "metadata": {
+      "rating": 4.3,
+      "duration": "half day to full day",
+      "coordinates": { "lat": 15.5524, "lon": 73.7517 },
+      "travelTypes": ["leisure", "adventure", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Basilica of Bom Jesus — UNESCO World Heritage",
+    "category": "attraction",
+    "subtype": "church",
+    "country": "India",
+    "city": "Goa",
+    "tags": ["church", "UNESCO", "heritage", "Portuguese", "history", "Old Goa", "architecture"],
+    "content": "The Basilica of Bom Jesus in Old Goa is a UNESCO World Heritage Site and one of the oldest churches in India. Built in 1594–1605, it houses the mortal remains of St. Francis Xavier in a silver casket. The church is a masterpiece of Baroque architecture with an ornate gilded altar, intricately carved wooden panels, and paintings dating back to the 16th century. The Exposition of the relics of St. Francis Xavier occurs every 10 years (next in 2024). Entry is free. Located in Old Goa (10 km from Panaji), it can be combined with visits to Se Cathedral, Church of St. Francis of Assisi, and the Archaeological Museum nearby. A half-day is sufficient to explore the Old Goa church complex.",
+    "metadata": {
+      "rating": 4.6,
+      "duration": "1-2 hours",
+      "estimatedCost": "Free entry",
+      "openingHours": "9:00 AM – 6:30 PM (closed during Mass)",
+      "coordinates": { "lat": 15.5009, "lon": 73.9116 },
+      "travelTypes": ["cultural", "leisure", "family"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Goan Seafood & Cuisine Guide",
+    "category": "restaurant",
+    "subtype": "local cuisine",
+    "country": "India",
+    "city": "Goa",
+    "tags": ["food", "seafood", "Goan cuisine", "vindaloo", "fish curry", "feni", "beach shacks"],
+    "content": "Goan cuisine is a distinctive fusion of Indian and Portuguese flavors, centered around seafood and coconut. Must-try dishes include Fish Curry Rice (the staple — a tangy coconut curry served with local fish and steamed rice), Prawn Balchão (spicy pickled prawns), Goan Pork Vindaloo (a fiery pork curry, not the British version), Bebinca (a layered Goan dessert), Chicken Cafreal (herb-marinated grilled chicken), and Xacuti (a complex spice curry). Drink the local Feni (cashew or coconut spirit). Top restaurants: Gunpowder (Assagao), Fisherman's Wharf (multiple locations), Martin's Corner (Betalbatim), and beach shacks at Palolem and Agonda for fresh catch-of-the-day. Budget meals at beach shacks cost ₹300-600, while upscale dining runs ₹1,000-2,500 per person.",
+    "metadata": {
+      "priceLevel": "$$",
+      "estimatedCost": "₹300-2,500 per person",
+      "travelTypes": ["leisure", "cultural", "solo", "family"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Goa Water Sports & Adventure Activities",
+    "category": "activity",
+    "subtype": "water sports",
+    "country": "India",
+    "city": "Goa",
+    "tags": ["water sports", "adventure", "parasailing", "scuba diving", "kayaking", "surfing"],
+    "content": "Goa offers a wide range of water sports and adventure activities, primarily from October to May. Popular activities include: Parasailing at Baga and Calangute (₹800-1,200 per ride), Jet Skiing (₹500-1,000 for 10 minutes), Banana Boat Rides (₹300-500 per person), Scuba Diving at Grande Island (₹3,500-5,000 for a certified dive including equipment), Snorkeling at Grande Island and Bat Island (₹1,500-2,500), Kayaking in mangroves at Zuari and Mandovi rivers (₹1,000-2,000), Surfing at Ashwem and Morjim beaches (lessons from ₹1,500), White Water Rafting on the Mhadei River (₹1,200-2,000 for 2 hours). Operators like Atlantis Watersports, Goa Dive Center, and Konkan Explorers are well-reviewed. Always verify operator safety certifications before booking.",
+    "metadata": {
+      "difficulty": "easy",
+      "estimatedCost": "₹500-5,000 per activity",
+      "bestTimeToVisit": ["October", "November", "December", "January", "February", "March", "April", "May"],
+      "travelTypes": ["adventure", "leisure", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Goa Nightlife Guide",
+    "category": "guide",
+    "subtype": "nightlife",
+    "country": "India",
+    "city": "Goa",
+    "tags": ["nightlife", "clubs", "bars", "party", "trance", "beach party", "north goa"],
+    "content": "Goa's nightlife is legendary, centered mainly in North Goa. Key venues include: Tito's Lane (Baga) — the most famous party strip with Tito's Club, Mambo's, and Cape Town Café. Club Cubana (Arpora) — hillside open-air club called 'nightclub in the sky' with pool and panoramic views. Curlies and Shiva Valley (Anjuna) — iconic trance music venues on the beach. LPK Waterfront (Nerul) — stunning riverfront venue carved into a hillside. Palolem Silent Disco — unique headphone-based beach party in South Goa. Seasons: Peak nightlife runs November to February. Wednesday nights feature Anjuna Flea Market + beach parties. Saturday Night Market at Arpora (November–April) combines shopping with live music. Cover charges range from free to ₹2,000. Drink prices: ₹200-600 for cocktails at clubs. Closing times vary — beach shacks close by 10 PM, clubs by 2-3 AM.",
+    "metadata": {
+      "bestTimeToVisit": ["November", "December", "January", "February"],
+      "estimatedCost": "₹500-3,000 per evening",
+      "travelTypes": ["solo", "leisure", "adventure"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Goa Monsoon Travel Tips",
+    "category": "seasonal_info",
+    "subtype": "monsoon season",
+    "country": "India",
+    "city": "Goa",
+    "tags": ["monsoon", "rainy season", "off-season", "budget travel", "waterfalls", "spice plantation"],
+    "content": "Visiting Goa during monsoon (June–September) is a completely different experience from the peak season. Advantages: Hotel prices drop 50-70%, Goa turns lush green, waterfalls like Dudhsagar are at full flow, spice plantations are at their most fragrant, and the rain creates a romantic atmosphere. Disadvantages: Most beach shacks close, water sports are suspended, swimming is dangerous due to strong currents and rip tides, some roads may flood temporarily, and north Goa nightlife is minimal. Monsoon activities: Visit Dudhsagar Falls (trek or jeep from Mollem), tour a spice plantation (Sahakari Spice Farm or Tropical Spice Farm — ₹400-600), explore Old Goa churches, take an Ayurvedic spa retreat, enjoy river cruises on the Mandovi. Pack: waterproof bags, quick-dry clothing, insect repellent, and an umbrella.",
+    "metadata": {
+      "bestTimeToVisit": ["June", "July", "August", "September"],
+      "travelTypes": ["leisure", "adventure", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Palolem Beach — South Goa",
+    "category": "hidden_gem",
+    "subtype": "beach",
+    "country": "India",
+    "city": "Goa",
+    "tags": ["beach", "south goa", "crescent", "kayaking", "dolphins", "quiet", "backpacker"],
+    "content": "Palolem Beach in South Goa is a stunning crescent-shaped beach bordered by rocky headlands on both sides. Unlike the party beaches of North Goa, Palolem offers a relaxed, bohemian atmosphere favored by backpackers and families. The beach is famous for its colorful wooden beach huts (₹1,000-3,000/night), dolphin-spotting boat trips (₹500 per person, early morning), kayaking to Butterfly Beach (a hidden cove accessible only by water), and the unique Silent Noise headphone party. The southern end leads to Colomb Beach, a quieter alternative. Restaurants like Dropadi and The Home serve excellent seafood and Goan dishes. Palolem is 67 km from Dabolim Airport — pre-book a taxi (₹1,500-2,000) for the 1.5-hour drive.",
+    "metadata": {
+      "rating": 4.5,
+      "duration": "full day or multi-day",
+      "coordinates": { "lat": 15.0101, "lon": 74.0232 },
+      "travelTypes": ["leisure", "solo", "family"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Goa Budget Guide — 5 Days",
+    "category": "budget_template",
+    "subtype": "budget breakdown",
+    "country": "India",
+    "city": "Goa",
+    "tags": ["budget", "5 days", "backpacking", "affordable", "cost breakdown"],
+    "content": "A 5-day budget trip to Goa can be done for ₹10,000–₹15,000 per person. Accommodation: Hostels in Anjuna/Arambol (₹400-800/night), beach huts in Palolem (₹1,000-2,000/night), budget hotels (₹1,000-2,500/night). Food: Beach shack meals (₹200-400), local restaurants (₹150-300), breakfast at cafés (₹100-200). Transport: Scooter rental is essential — ₹300-500/day for a Honda Activa (international driving permit required technically, Indian license accepted). Auto-rickshaws are expensive. Flights from Delhi/Mumbai start at ₹2,000-4,000 if booked in advance. Activities: Beach time is free, church visits free, water sports (₹500-3,000), Dudhsagar trek (₹2,000 by jeep). Alcohol: Local Kingfisher beer (₹80-150), cocktails at shacks (₹200-400). Tips: Visit during shoulder season (October or March) for lower prices and fewer crowds.",
+    "metadata": {
+      "estimatedCost": "₹10,000-15,000 total for 5 days",
+      "currency": "INR",
+      "travelTypes": ["solo", "adventure", "leisure"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Goa Safety & Emergency Information",
+    "category": "emergency_info",
+    "subtype": "safety",
+    "country": "India",
+    "city": "Goa",
+    "tags": ["emergency", "safety", "police", "hospital", "helpline", "scams"],
+    "content": "Emergency contacts for Goa: Police: 100 or 112. Tourist Police: 0832-2412790. Ambulance: 108. Fire: 101. Goa Medical College & Hospital (Bambolim): 0832-2458727 — main government hospital. Manipal Hospital (Dona Paula): 0832-2456789. Tourist Helpline: 1800-233-7462. Coast Guard: 1554. Safety tips: Never swim at unguarded beaches or during monsoon — rip currents are deadly. Lock scooter helmets (theft is common). Don't leave belongings unattended on the beach. Drink responsibly — spiked drinks have been reported at some parties. Carry ID at all times. Avoid driving scooters at night on poorly lit roads. Common scams include inflated taxi fares, fake drugs, and overcharging at water sports operators — always agree on prices beforehand.",
+    "metadata": {
+      "phoneNumbers": ["100", "112", "108", "0832-2412790", "1800-233-7462"],
+      "travelTypes": ["leisure", "business", "adventure", "cultural", "family", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Sunburn Festival — Goa",
+    "category": "festival",
+    "subtype": "music festival",
+    "country": "India",
+    "city": "Goa",
+    "tags": ["festival", "EDM", "music", "December", "party", "dance", "international DJs"],
+    "content": "Sunburn Festival is Asia's largest electronic dance music (EDM) festival, held annually in Goa during late December. Founded in 2007, it features international and Indian DJs across multiple stages over 3 days. Past headliners include Martin Garrix, Hardwell, Tiësto, and Marshmello. The festival takes place at various venues in North Goa (location changes yearly). Tickets range from ₹3,000 for a day pass to ₹10,000+ for a 3-day VIP pass. The event coincides with the peak tourist season and New Year celebrations, so accommodation prices in Goa surge 3–5x. Book hotels at least 2–3 months in advance. Alternative: Sunburn also hosts smaller 'Sunburn City' events in other Indian cities throughout the year.",
+    "metadata": {
+      "bestTimeToVisit": ["December"],
+      "estimatedCost": "₹3,000-10,000 festival pass",
+      "duration": "3 days",
+      "travelTypes": ["solo", "leisure", "adventure"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "FAQ — Do I Need a Visa for Goa?",
+    "category": "faq",
+    "subtype": "visa and entry",
+    "country": "India",
+    "city": "Goa",
+    "tags": ["visa", "FAQ", "entry requirements", "e-visa", "international travel"],
+    "content": "Goa is part of India, so standard Indian visa rules apply. Most foreign nationals need a visa to enter India. Options: e-Visa (recommended for tourists) — apply online at indianvisaonline.gov.in, available for 30-day, 1-year, or 5-year durations. Processing takes 3-5 business days. Tourist e-Visa costs $25-80 depending on duration and nationality. Visa on Arrival is available for Japanese, South Korean, and UAE nationals. Nationals of Nepal and Bhutan do not need a visa. All visitors must have a passport valid for at least 6 months beyond entry date with at least 2 blank pages. Indian nationals from any state can visit Goa without any permits. Travel insurance is strongly recommended but not mandatory for visa applications."
+  }
+]
