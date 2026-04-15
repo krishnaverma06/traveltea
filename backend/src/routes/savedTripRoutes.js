@@ -7,6 +7,7 @@ import {
   updateSavedTrip,
   deleteSavedTrip,
   checkTripSaved,
+  semanticSearchTrips,
 } from "../controllers/savedTripController.js";
 
 const router = Router();
@@ -22,6 +23,9 @@ router.get("/", getSavedTrips);
 
 // Check if a trip is already saved
 router.get("/check", checkTripSaved);
+
+// Semantic search across saved trips (must be before /:id)
+router.get("/search", semanticSearchTrips);
 
 // Get a specific saved trip
 router.get("/:id", getSavedTrip);
