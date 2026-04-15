@@ -60,7 +60,54 @@ export function generateMetadata(
   const categoryDefaults = CATEGORY_METADATA_DEFAULTS[doc.category] || {};
   const provided = doc.metadata || {};
 
-  return mergeMetadata(provided, categoryDefaults);
+  // Semantic Inference for rich filtering
+  const inferred: Partial<IVectorDocumentMetadata> = {};
+
+  if (provided.duration || categoryDefaults.duration) {
+    inferred.durationCategory = inferDurationCategory(
+      (provided.duration || categoryDefaults.duration) as string
+    );
+  }
+
+  if (provided.estimatedCost || provided.priceLevel) {
+    inferred.budgetTier = inferBudgetTier(
+      ((provided.estimatedCost || provided.priceLevel) as string)
+    );
+  }
+
+  return mergeMetadata(mergeMetadata(provided, inferred), categoryDefaults);
+}
+
+// ─── Inference Helpers ─────────────────────────────────────────────────────────
+
+function inferDurationCategory(duration: string): string {
+  const d = duration.toLowerCase();
+  if (d.includes('hour') || d.includes('min')) return 'Short (< half day)';
+  if (d.includes('half day')) return 'Half Day';
+  if (d.includes('day') && !d.includes('days')) return 'Full Day';
+  if (d.includes('days') || d.includes('week')) return 'Multi-Day';
+  return 'Flexible';
+}
+
+export function inferBudgetTier(cost: any): string {
+  if (!cost) return 'Standard';
+  
+  // Handle budget object from SavedTrip
+  if (typeof cost === 'object') {
+    const total = cost.total || 0;
+    // Assuming values are often in INR for this project based on seed data
+    if (total === 0) return 'Standard';
+    if (total <= 15000) return 'Budget';
+    if (total <= 50000) return 'Moderate';
+    return 'Luxury';
+  }
+
+  // Handle string cost
+  const c = String(cost).toLowerCase();
+  if (c.includes('free') || c === '$' || c.includes('budget') || c.includes('cheap')) return 'Budget';
+  if (c === '$$' || c.includes('moderate') || c.includes('mid-range')) return 'Moderate';
+  if (c === '$$$' || c === '$$$$' || c.includes('luxury') || c.includes('expensive')) return 'Luxury';
+  return 'Standard';
 }
 
 // ─── Metadata Merging ──────────────────────────────────────────────────────────

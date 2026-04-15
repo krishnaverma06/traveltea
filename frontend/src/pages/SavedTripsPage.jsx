@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useTrip } from "@/contexts/TripContext";
-import { apiGetSavedTrips, apiDeleteSavedTrip, getToken } from "@/lib/api";
+import { apiGetSavedTrips, apiDeleteSavedTrip, apiSearchSavedTrips, getToken } from "@/lib/api";
 import { toast } from "react-toastify";
 import TripCard from "@/components/TripCard";
 import {
@@ -32,20 +32,35 @@ const SavedTripsPage = () => {
   }, []);
 
   useEffect(() => {
-    // Filter trips based on search term
     if (!searchTerm.trim()) {
       setFilteredTrips(savedTrips);
-    } else {
-      const filtered = savedTrips.filter(
-        (trip) =>
-          trip.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          trip.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          trip.tags?.some((tag) =>
-            tag.toLowerCase().includes(searchTerm.toLowerCase())
-          )
-      );
-      setFilteredTrips(filtered);
+      return;
     }
+
+    const timer = setTimeout(async () => {
+      try {
+        const token = getToken();
+        if (!token) return;
+        
+        const response = await apiSearchSavedTrips(searchTerm.trim(), token);
+        if (response && response.savedTrips) {
+          setFilteredTrips(response.savedTrips);
+        }
+      } catch (err) {
+        console.error("Semantic search failed, falling back to local search", err);
+        // Fallback to robust local search
+        const term = searchTerm.toLowerCase();
+        const filtered = savedTrips.filter(
+          (trip) =>
+            (trip.title || "").toLowerCase().includes(term) ||
+            (trip.description || "").toLowerCase().includes(term) ||
+            (trip.tags || []).some((tag) => typeof tag === 'string' && tag.toLowerCase().includes(term))
+        );
+        setFilteredTrips(filtered);
+      }
+    }, 400); // 400ms debounce
+
+    return () => clearTimeout(timer);
   }, [searchTerm, savedTrips]);
 
   const fetchSavedTrips = async () => {

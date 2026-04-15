@@ -204,6 +204,12 @@ export async function ingestSearchKnowledge(
           metadata: {
             travelTypes: ['leisure', 'cultural'],
           },
+          // Lifecycle Management prep
+          lastAccessed: now,
+          accessCount: 1,
+          archived: false,
+          // Set an arbitrary expiration for search knowledge (e.g., 6 months from now)
+          expiresAt: new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000),
         },
       },
       { upsert: true, new: true }
@@ -232,6 +238,10 @@ async function updateSearchCount(docId: string, currentCount: number): Promise<v
       searchCount: newCount,
       lastSearched: now,
       popularityScore: newScore,
+      lastAccessed: now,
     },
+    $inc: {
+      accessCount: 1,
+    }
   });
 }

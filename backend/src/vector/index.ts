@@ -13,6 +13,7 @@
 export {
   VectorDocumentCategory,
   KnowledgeSourceType,
+  ChunkType,
   type IVectorDocument,
   type IVectorDocumentMetadata,
   type VectorDocumentInput,
@@ -75,6 +76,7 @@ export {
 
 export * as searchKnowledgeService from './services/search-knowledge.service.js';
 export * as tripKnowledgeService from './services/trip-knowledge.service.js';
+export * as userProfileService from './services/user-profile.service.js';
 
 // ─── Repository ────────────────────────────────────────────────────────────────
 
