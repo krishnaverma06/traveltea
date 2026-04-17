@@ -14,6 +14,7 @@ function serializeUser(user) {
     name: user.name,
     email: user.email,
     bio: user.bio,
+    avatar: user.avatar,
     notifications: user.notifications,
     preferences: user.preferences,
     createdAt: user.createdAt,
@@ -117,10 +118,11 @@ export const updatePreferences = async (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-    const { name, bio, notifications } = req.body;
+    const { name, bio, avatar, notifications } = req.body;
     const updates = {};
     if (name !== undefined) updates.name = name;
     if (bio !== undefined) updates.bio = bio;
+    if (avatar !== undefined) updates.avatar = avatar;
     if (notifications !== undefined) updates.notifications = notifications;
 
     const user = await User.findByIdAndUpdate(req.userId, updates, {

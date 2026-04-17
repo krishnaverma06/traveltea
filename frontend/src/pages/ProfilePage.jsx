@@ -68,6 +68,7 @@ const ProfilePage = () => {
 
   const [name, setName] = useState(user?.name || "");
   const [bio, setBio] = useState(user?.bio || "");
+  const [avatar, setAvatar] = useState(user?.avatar || "");
   const [notifications, setNotifications] = useState(
     user?.notifications ?? true
   );
@@ -81,6 +82,19 @@ const ProfilePage = () => {
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Sync state when user object loads (e.g. after hard refresh)
+  useEffect(() => {
+    if (user) {
+      setName(user.name || "");
+      setBio(user.bio || "");
+      setAvatar(user.avatar || "");
+      setNotifications(user.notifications ?? true);
+      setBudget(user.preferences?.budget || "mid-range");
+      setTravelStyle(user.preferences?.travelStyle || "cultural");
+      setInterests(user.preferences?.interests || []);
+    }
+  }, [user]);
 
   useEffect(() => {
     const token = getToken();
@@ -121,16 +135,16 @@ const ProfilePage = () => {
 
   const memberSince = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString("en-US", {
-        month: "long",
-        year: "numeric",
-      })
+      month: "long",
+      year: "numeric",
+    })
     : "—";
 
   const handleSaveProfile = async () => {
     try {
       setIsSavingProfile(true);
       const token = getToken();
-      const res = await apiUpdateProfile({ name, bio, notifications }, token);
+      const res = await apiUpdateProfile({ name, bio, avatar, notifications }, token);
       updateUser(res.user);
       toast.success("Profile updated successfully");
     } catch (err) {
@@ -269,45 +283,76 @@ const ProfilePage = () => {
           <h2 className="text-xl font-bold text-gray-900 mb-4">
             Personal Information
           </h2>
-          <Card className="p-6 bg-white border border-gray-200 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Name
-              </label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+          <Card className="p-6 bg-white border border-gray-200">
+            <div className="flex flex-col md:flex-row gap-8 items-start">
+              {/* Avatar Column */}
+              <div className="w-full md:w-1/3 flex flex-col items-center gap-4">
+                <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl bg-gray-50 flex items-center justify-center">
+                  <img 
+                    src={avatar ? `https://api.dicebear.com/7.x/adventurer/svg?seed=${avatar}` : `https://api.dicebear.com/7.x/adventurer/svg?seed=${name || 'Felix'}`} 
+                    alt="Avatar" 
+                    className="w-full h-full object-cover" 
+                  />
+                </div>
+                <div className="flex gap-2 flex-wrap justify-center">
+                  {["Felix", "Aneka", "Jack", "Luna", "Oscar", "Bella"].map(seed => (
+                    <button 
+                      key={seed} 
+                      onClick={() => setAvatar(seed)} 
+                      className={`w-10 h-10 rounded-full overflow-hidden border-2 transition-all ${avatar === seed ? 'border-blue-500 scale-110 shadow-md' : 'border-transparent hover:border-gray-300'}`}
+                      title={`Select ${seed}`}
+                    >
+                      <img src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${seed}`} alt={seed} className="w-full h-full bg-gray-50" />
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 text-center">Select your avatar</p>
+              </div>
+
+              {/* Info Column */}
+              <div className="w-full md:w-2/3 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Name
+                  </label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email
+                  </label>
+                  <Input value={user?.email || ""} disabled className="bg-gray-50" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Bio
+                  </label>
+                  <textarea
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value.slice(0, 500))}
+                    maxLength={500}
+                    rows={4}
+                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    placeholder="Tell us a bit about yourself..."
+                  />
+                  <p className="text-xs text-gray-400 mt-1 text-right">
+                    {bio.length}/500 characters
+                  </p>
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button
+                    onClick={handleSaveProfile}
+                    disabled={isSavingProfile}
+                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8"
+                  >
+                    {isSavingProfile ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : null}
+                    Save Changes
+                  </Button>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
-              <Input value={user?.email || ""} disabled className="bg-gray-50" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Bio
-              </label>
-              <textarea
-                value={bio}
-                onChange={(e) => setBio(e.target.value.slice(0, 500))}
-                maxLength={500}
-                rows={4}
-                className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Tell us a bit about yourself..."
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                {bio.length}/500 characters
-              </p>
-            </div>
-            <Button
-              onClick={handleSaveProfile}
-              disabled={isSavingProfile}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
-            >
-              {isSavingProfile ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : null}
-              Save Changes
-            </Button>
           </Card>
         </section>
 
@@ -326,11 +371,10 @@ const ProfilePage = () => {
                   <button
                     key={opt.value}
                     onClick={() => setBudget(opt.value)}
-                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${
-                      budget === opt.value
+                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${budget === opt.value
                         ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg"
                         : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     {opt.label}
                   </button>
@@ -347,11 +391,10 @@ const ProfilePage = () => {
                   <button
                     key={opt.value}
                     onClick={() => setTravelStyle(opt.value)}
-                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${
-                      travelStyle === opt.value
+                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${travelStyle === opt.value
                         ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg"
                         : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     {opt.label}
                   </button>
@@ -366,11 +409,10 @@ const ProfilePage = () => {
                   <button
                     key={interest}
                     onClick={() => toggleInterest(interest)}
-                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${
-                      interests.includes(interest)
+                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${interests.includes(interest)
                         ? "bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-lg"
                         : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     {interest}
                   </button>

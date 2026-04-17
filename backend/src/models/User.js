@@ -27,6 +27,10 @@ const userSchema = new mongoose.Schema(
       maxlength: 500,
       default: "",
     },
+    avatar: {
+      type: String,
+      default: "",
+    },
     notifications: {
       type: Boolean,
       default: true,

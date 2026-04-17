@@ -7,6 +7,8 @@ import {
 } from "react-router-dom";
 import { TripProvider, useTrip } from "./contexts/TripContext";
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import LandingPage from "./pages/LandingPage.jsx";
 import TripPlannerPage from "./pages/TripPlannerPage.jsx";
 import BudgetPage from "./pages/BudgetPage.jsx";
@@ -209,6 +211,7 @@ const AppContent = () => {
 function App() {
   return (
     <AuthProvider>
+      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} />
       <TripProvider>
         <AppContent />
       </TripProvider>

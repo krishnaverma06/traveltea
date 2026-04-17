@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import TripPlanningSidebar from "@/components/TripPlanningSidebar";
 import { useTrip } from "@/contexts/TripContext";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Plus,
   CalendarIcon,
@@ -55,7 +56,7 @@ const DashboardNav = ({ updateTripData }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const searchBoxRef = React.useRef(null);
-  const isAuthenticated = Boolean(getToken());
+  const { user, isAuthenticated } = useAuth();
 
   const handleLogout = () => {
     clearToken();
@@ -228,16 +229,20 @@ const DashboardNav = ({ updateTripData }) => {
 
             {isAuthenticated && (
               <div className="ml-4 flex items-center gap-2">
-                <Button variant="ghost" className="px-4">
-                  <Link to="/profile">Profile</Link>
-                </Button>
                 <Button
                   variant="outline"
                   onClick={handleLogout}
-                  className="px-4"
+                  className="px-4 text-black"
                 >
                   Logout
                 </Button>
+                <Link to="/profile" className="ml-2 w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 hover:border-blue-500 transition-all flex items-center justify-center bg-gray-50 flex-shrink-0" title="Go to Profile">
+                  <img 
+                    src={user?.avatar ? `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.avatar}` : `https://api.dicebear.com/7.x/adventurer/svg?seed=${user?.name || 'Felix'}`} 
+                    alt="Profile" 
+                    className="w-full h-full object-cover" 
+                  />
+                </Link>
               </div>
             )}
           </div>
