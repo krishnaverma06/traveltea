@@ -10,7 +10,7 @@ import { Plane, MapPin } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-export default function Chat() {
+export default function Chat({ isDrawer = false }) {
   // Generate the conversation id up front so the socket joins this
   // conversation's room before the first message is ever sent — otherwise
   // the very first agent:response would be emitted before we could join.
@@ -214,44 +214,46 @@ export default function Chat() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900">
+    <div className={`flex flex-col ${isDrawer ? 'h-full' : 'h-screen'} bg-gray-100 dark:bg-gray-900`}>
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
-              <Plane className="text-white" size={20} />
+      {!isDrawer && (
+        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
+                <Plane className="text-white" size={20} />
+              </div>
+
+              <div>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                  TravelTea
+                </h1>
+
+                <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      isConnected ? "bg-green-500" : "bg-red-500"
+                    }`}
+                  />
+
+                  {isConnected ? "Connected" : "Disconnected"}
+                </p>
+              </div>
             </div>
 
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                TravelTea
-              </h1>
+            {conversationId && (
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <MapPin size={16} />
 
-              <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    isConnected ? "bg-green-500" : "bg-red-500"
-                  }`}
-                />
-
-                {isConnected ? "Connected" : "Disconnected"}
-              </p>
-            </div>
+                <span className="hidden sm:inline">
+                  Session: {conversationId.slice(0, 8)}
+                  ...
+                </span>
+              </div>
+            )}
           </div>
-
-          {conversationId && (
-            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-              <MapPin size={16} />
-
-              <span className="hidden sm:inline">
-                Session: {conversationId.slice(0, 8)}
-                ...
-              </span>
-            </div>
-          )}
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* Split View */}
       <div className="flex-1 flex overflow-hidden">
@@ -269,7 +271,7 @@ export default function Chat() {
           />
         ) : (
           /* Chat */
-          <div className="w-[35%] flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
+          <div className={`${isDrawer ? 'w-full' : 'w-[35%]'} flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700`}>
             <div className="flex-1 overflow-y-auto px-6 py-6">
               {messages.length === 0 ? (
                 <div className="text-center py-12">
@@ -326,9 +328,11 @@ export default function Chat() {
         )}
 
         {/* Map */}
-        <div className="w-[65%] relative isolate bg-gray-50 dark:bg-gray-900">
-          <Map locations={mapLocations} focus={focusedLocation} />
-        </div>
+        {!isDrawer && (
+          <div className="w-[65%] relative isolate bg-gray-50 dark:bg-gray-900">
+            <Map locations={mapLocations} focus={focusedLocation} />
+          </div>
+        )}
       </div>
     </div>
   );

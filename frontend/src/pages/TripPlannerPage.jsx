@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { format, isAfter, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
+import ChatDrawer from "@/components/ChatDrawer";
 
 const DatePicker = ({ selected, onSelect }) => {
   const today = new Date();
@@ -55,6 +56,7 @@ const DashboardNav = ({ updateTripData }) => {
   const [suggestions, setSuggestions] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
   const searchBoxRef = React.useRef(null);
   const { user, isAuthenticated } = useAuth();
 
@@ -127,6 +129,14 @@ const DashboardNav = ({ updateTripData }) => {
                 Plan Smarter
               </span>
             </div>
+
+            <Button
+              onClick={() => setIsChatDrawerOpen(true)}
+              className="ml-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 shadow-md hover:shadow-lg transition-all duration-300 rounded-full px-4 h-9 font-medium flex items-center gap-2 group hidden sm:flex"
+            >
+              <Sparkles className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+              <span>AI Assistant</span>
+            </Button>
           </div>
 
           <div className="flex-1 max-w-2xl mx-8">
@@ -248,6 +258,11 @@ const DashboardNav = ({ updateTripData }) => {
           </div>
         </div>
       </div>
+      
+      <ChatDrawer 
+        isOpen={isChatDrawerOpen} 
+        onClose={() => setIsChatDrawerOpen(false)} 
+      />
     </nav>
   );
 };
