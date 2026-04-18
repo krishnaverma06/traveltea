@@ -181,3 +181,14 @@ export async function apiCheckTripSaved(params, token) {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+export async function apiMarkTripAsUpcoming(id, payload, token) {
+  return request(`/api/saved-trips/${id}/upcoming`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+}

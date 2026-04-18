@@ -29,6 +29,12 @@ const ResultsPage = () => {
 
   // Generate AI itinerary when component mounts with complete data
   useEffect(() => {
+    if (tripData?.generatedItinerary) {
+      console.log("✅ Using existing generated itinerary from context");
+      setGeneratedItinerary(tripData.generatedItinerary);
+      return;
+    }
+
     const hasCore =
       tripData?.startDate &&
       Array.isArray(tripData?.cities) &&

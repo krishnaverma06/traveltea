@@ -23,6 +23,7 @@ const budgetSchema = new mongoose.Schema(
 
 const activitySchema = new mongoose.Schema(
   {
+    id: { type: String },
     name: { type: String, required: true },
     description: { type: String },
     category: { type: String },
@@ -31,10 +32,20 @@ const activitySchema = new mongoose.Schema(
     location: {
       lat: { type: Number },
       lon: { type: Number },
+      latitude: { type: Number },
+      longitude: { type: Number },
       address: { type: String },
     },
     rating: { type: Number },
     imageUrl: { type: String },
+    tags: { type: [String], default: [] },
+    openingHours: { type: [String], default: [] },
+    isOpen: { type: Boolean },
+    websiteUrl: { type: String },
+    phoneNumber: { type: String },
+    distanceToNext: { type: String },
+    mustVisit: { type: Boolean },
+    bestTimeToVisit: { type: String },
   },
   { _id: false }
 );

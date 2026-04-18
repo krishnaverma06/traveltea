@@ -185,7 +185,7 @@ export class ItineraryBuilder {
       console.log(`🎯 [OPTIMIZED ITINERARY] Building ${duration}-day itinerary for ${destination}`);
 
       let places = context.places;
-      
+
       // If places not provided, fetch them
       if (!places) {
         const coords = context.coords || await this.getDestinationCoords(destination);
@@ -193,7 +193,7 @@ export class ItineraryBuilder {
           console.error('Failed to geocode destination');
           return null;
         }
-        
+
         places = await this.fetchEnhancedPlaces(
           coords.lat,
           coords.lon,
@@ -256,12 +256,12 @@ export class ItineraryBuilder {
     globalUsedPlaces: Set<string>
   ): DayPlan {
     let budgetRemaining = dailyBudget * numberOfPeople;
-    
+
     // Handle both old and new place formats
     let activities: Destination[] = [];
     let restaurants: Destination[] = [];
     let hotels: Destination[] = [];
-    
+
     if (places.activities && places.restaurants) {
       // New enhanced format
       activities = places.activities || [];
@@ -269,15 +269,15 @@ export class ItineraryBuilder {
       hotels = places.hotels || [];
     } else if (places.all) {
       // Old format - separate activities and restaurants
-      restaurants = places.all.filter((p: Destination) => 
-        p.category.some(c => c.toLowerCase().includes('restaurant') || 
-                            c.toLowerCase().includes('food') || 
-                            c.toLowerCase().includes('cafe'))
+      restaurants = places.all.filter((p: Destination) =>
+        p.category.some(c => c.toLowerCase().includes('restaurant') ||
+          c.toLowerCase().includes('food') ||
+          c.toLowerCase().includes('cafe'))
       );
-      activities = places.all.filter((p: Destination) => 
-        !p.category.some(c => c.toLowerCase().includes('restaurant') || 
-                             c.toLowerCase().includes('food') || 
-                             c.toLowerCase().includes('cafe'))
+      activities = places.all.filter((p: Destination) =>
+        !p.category.some(c => c.toLowerCase().includes('restaurant') ||
+          c.toLowerCase().includes('food') ||
+          c.toLowerCase().includes('cafe'))
       );
     }
 
@@ -288,8 +288,8 @@ export class ItineraryBuilder {
 
     // Helper to select unique places with budget consideration
     const selectPlaces = (
-      count: number, 
-      sourceArray: Destination[], 
+      count: number,
+      sourceArray: Destination[],
       placeType: 'activity' | 'restaurant' | 'hotel' = 'activity'
     ): Destination[] => {
       const selected: Destination[] = [];
@@ -300,11 +300,11 @@ export class ItineraryBuilder {
         attempts++;
         const place = sourceArray[i];
         const placeId = `${place.name}-${place.location.latitude}-${place.location.longitude}`;
-        
+
         // Check if place is already used globally
         if (!globalUsedPlaces.has(placeId)) {
           const estimatedCost = this.parseCost(this.estimateCost(place.category)) * numberOfPeople;
-          
+
           if (budgetRemaining >= estimatedCost || estimatedCost === 0) {
             selected.push(place);
             globalUsedPlaces.add(placeId); // Add to global tracking
@@ -318,7 +318,7 @@ export class ItineraryBuilder {
         for (let i = 0; i < sourceArray.length && selected.length < count; i++) {
           const place = sourceArray[i];
           const estimatedCost = this.parseCost(this.estimateCost(place.category)) * numberOfPeople;
-          
+
           if (budgetRemaining >= estimatedCost || estimatedCost === 0) {
             const placeId = `${place.name}-${place.location.latitude}-${place.location.longitude}`;
             if (!selected.some(p => `${p.name}-${p.location.latitude}-${p.location.longitude}` === placeId)) {
@@ -334,31 +334,31 @@ export class ItineraryBuilder {
 
     // Generate meaningful day titles with trip progression
     const dayTitles = [
-      'Arrival & First Impressions', 'City Discovery', 'Cultural Journey', 'Local Adventures', 
-      'Hidden Treasures', 'Art & Heritage', 'Nature & Relaxation', 'Foodie Exploration', 
+      'Arrival & First Impressions', 'City Discovery', 'Cultural Journey', 'Local Adventures',
+      'Hidden Treasures', 'Art & Heritage', 'Nature & Relaxation', 'Foodie Exploration',
       'Scenic Wonders', 'Local Life', 'Urban Exploration', 'Farewell Adventures'
     ];
-    
+
     const title = dayTitles[Math.min(dayNumber - 1, dayTitles.length - 1)];
 
     // Add hotel recommendation for the first day or if it's a longer trip
     const timeSlots = [
       this.buildTimeSlot(
-        'morning', 
-        '09:00', 
-        '12:00', 
+        'morning',
+        '09:00',
+        '12:00',
         selectPlaces(activitiesPerDay.morning, shuffledActivities, 'activity')
       ),
       this.buildTimeSlot(
-        'afternoon', 
-        '14:00', 
-        '18:00', 
+        'afternoon',
+        '14:00',
+        '18:00',
         selectPlaces(activitiesPerDay.afternoon, shuffledActivities, 'activity')
       ),
       this.buildTimeSlot(
-        'evening', 
-        '19:00', 
-        '22:00', 
+        'evening',
+        '19:00',
+        '22:00',
         selectPlaces(activitiesPerDay.evening, shuffledRestaurants, 'restaurant')
       ),
     ];
@@ -444,38 +444,38 @@ export class ItineraryBuilder {
     try {
       // Get base places with enhanced categories based on travel type
       const enhancedCategories = this.getEnhancedCategoriesForTravelType(travelType, preferredCategories);
-      
+
       console.log(`🎯 Enhanced categories for ${travelType}:`, enhancedCategories);
-      
+
       // Fetch diverse places including hotels
       const basePlaces = await this.openTripMapAPI.getItineraryPlaces(lat, lon, 15000); // Larger radius
-      
+
       // Fetch hotels separately if needed
       let hotels: Destination[] = [];
       if (includeHotels) {
         hotels = await this.openTripMapAPI.searchByCategory(lat, lon, 'accomodations', 10000, 10);
       }
-      
+
       // Combine and categorize all places
       const activities = [
         ...basePlaces.attractions,
         ...basePlaces.culture,
         ...basePlaces.nature,
       ].filter(p => p.name);
-      
+
       const restaurants = basePlaces.restaurants.filter(p => p.name);
-      
+
       // Filter activities by enhanced categories
       const filteredActivities = activities.filter(place => {
         const placeCategories = place.category.map(c => c.toLowerCase());
-        return enhancedCategories.some(pref => 
+        return enhancedCategories.some(pref =>
           placeCategories.some(cat => cat.includes(pref.toLowerCase()) || pref.toLowerCase().includes(cat))
         );
       });
-      
+
       // Use filtered activities if available, otherwise use all
       const finalActivities = filteredActivities.length > 0 ? filteredActivities : activities;
-      
+
       // Group by category
       const byCategory = new Map<string, Destination[]>();
       [...finalActivities, ...restaurants, ...hotels].forEach(place => {
@@ -515,27 +515,27 @@ export class ItineraryBuilder {
   ): string[] {
     const travelTypeCategories: Record<string, string[]> = {
       business: [
-        'restaurants', 'cafes', 'hotels', 'cultural', 'museums', 
+        'restaurants', 'cafes', 'hotels', 'cultural', 'museums',
         'architecture', 'historic', 'urban_environment'
       ],
       leisure: [
-        'beaches', 'parks', 'museums', 'restaurants', 'shopping', 
+        'beaches', 'parks', 'museums', 'restaurants', 'shopping',
         'natural', 'amusement_parks', 'recreation'
       ],
       adventure: [
-        'natural', 'sport', 'climbing', 'interesting_places', 
+        'natural', 'sport', 'climbing', 'interesting_places',
         'amusement_parks', 'recreation', 'geology'
       ],
       cultural: [
-        'museums', 'historic', 'architecture', 'theatres_and_entertainments', 
+        'museums', 'historic', 'architecture', 'theatres_and_entertainments',
         'cultural', 'religion', 'archaeology'
       ],
       family: [
-        'amusement_parks', 'parks', 'museums', 'restaurants', 
+        'amusement_parks', 'parks', 'museums', 'restaurants',
         'interesting_places', 'natural', 'recreation'
       ],
       solo: [
-        'museums', 'cafes', 'parks', 'interesting_places', 
+        'museums', 'cafes', 'parks', 'interesting_places',
         'cultural', 'restaurants', 'galleries'
       ]
     };
@@ -584,12 +584,12 @@ export class ItineraryBuilder {
     numberOfPeople: number
   ): DayPlan {
     let budgetRemaining = dailyBudget * numberOfPeople;
-    
+
     // Separate restaurants from other activities
-    const restaurants = places.all.filter(p => 
+    const restaurants = places.all.filter(p =>
       p.category.some(c => c.toLowerCase().includes('restaurant') || c.toLowerCase().includes('food'))
     );
-    const activities = places.all.filter(p => 
+    const activities = places.all.filter(p =>
       !p.category.some(c => c.toLowerCase().includes('restaurant') || c.toLowerCase().includes('food'))
     );
 
@@ -603,8 +603,8 @@ export class ItineraryBuilder {
 
     // Helper to select unique places with budget consideration
     const selectPlaces = (
-      count: number, 
-      sourceArray: Destination[], 
+      count: number,
+      sourceArray: Destination[],
       usedSet: Set<string>
     ): Destination[] => {
       const selected: Destination[] = [];
@@ -615,11 +615,11 @@ export class ItineraryBuilder {
         attempts++;
         const place = sourceArray[i];
         const placeId = `${place.name}-${place.location.latitude}-${place.location.longitude}`;
-        
+
         if (!usedSet.has(placeId)) {
           // Estimate cost for this activity
           const estimatedCost = this.parseCost(this.estimateCost(place.category)) * numberOfPeople;
-          
+
           // Check if we can afford this activity (or if it's free)
           if (budgetRemaining >= estimatedCost || estimatedCost === 0) {
             selected.push(place);
@@ -635,7 +635,7 @@ export class ItineraryBuilder {
         for (let i = 0; i < sourceArray.length && selected.length < count; i++) {
           const place = sourceArray[i];
           const estimatedCost = this.parseCost(this.estimateCost(place.category)) * numberOfPeople;
-          
+
           if (budgetRemaining >= estimatedCost || estimatedCost === 0) {
             const placeId = `${place.name}-${place.location.latitude}-${place.location.longitude}`;
             if (!selected.some(p => `${p.name}-${p.location.latitude}-${p.location.longitude}` === placeId)) {
@@ -655,7 +655,7 @@ export class ItineraryBuilder {
       'Art & Heritage', 'Nature & Relaxation', 'Foodie Exploration', 'Scenic Wonders',
       'Local Life', 'Final Adventures'
     ];
-    
+
     const title = dayTitles[(dayNumber - 1) % dayTitles.length];
 
     return {
@@ -663,21 +663,21 @@ export class ItineraryBuilder {
       title,
       timeSlots: [
         this.buildTimeSlot(
-          'morning', 
-          '09:00', 
-          '12:00', 
+          'morning',
+          '09:00',
+          '12:00',
           selectPlaces(activitiesPerDay.morning, shuffledActivities, usedActivities)
         ),
         this.buildTimeSlot(
-          'afternoon', 
-          '14:00', 
-          '18:00', 
+          'afternoon',
+          '14:00',
+          '18:00',
           selectPlaces(activitiesPerDay.afternoon, shuffledActivities, usedActivities)
         ),
         this.buildTimeSlot(
-          'evening', 
-          '19:00', 
-          '22:00', 
+          'evening',
+          '19:00',
+          '22:00',
           selectPlaces(activitiesPerDay.evening, shuffledRestaurants, usedRestaurants)
         ),
       ],
@@ -689,12 +689,12 @@ export class ItineraryBuilder {
    */
   private parseCost(costString: string): number {
     if (costString.toLowerCase().includes('free')) return 0;
-    
+
     const numbers = costString.match(/\d+/g);
     if (!numbers || numbers.length === 0) return 20; // default
-    
+
     if (numbers.length === 1) return parseInt(numbers[0]);
-    
+
     // Average of range
     const sum = numbers.reduce((a, b) => a + parseInt(b), 0);
     return Math.round(sum / numbers.length);
@@ -735,7 +735,7 @@ export class ItineraryBuilder {
     // Calculate unique distribution for each day
     const activitiesPerSlot = 2;
     const restaurantsPerSlot = 2;
-    
+
     // Distribute activities uniquely across days
     const baseIndex = (dayNumber - 1) * (activitiesPerSlot * 2); // 2 slots (morning, afternoon)
     const restaurantIndex = (dayNumber - 1) * restaurantsPerSlot;
@@ -777,7 +777,7 @@ export class ItineraryBuilder {
       'Hidden Gems', 'Art & History', 'Adventure Day', 'Relaxation & Fun',
       'Local Flavors', 'Scenic Discoveries'
     ];
-    
+
     const title = dayTitles[(dayNumber - 1) % dayTitles.length];
 
     return {
@@ -829,7 +829,7 @@ export class ItineraryBuilder {
     // Estimate duration based on category
     const duration = this.estimateDuration(destination.category);
     const cost = this.estimateCost(destination.category);
-    
+
     // Generate better image URL based on category and name
     const imageUrl = this.generateImageUrl(destination);
 
@@ -852,7 +852,7 @@ export class ItineraryBuilder {
     };
 
     console.log('🎯 [ACTIVITY] Created activity:', activity.name, 'with imageUrl:', activity.imageUrl);
-    
+
     return activity;
   }
 
@@ -872,7 +872,7 @@ export class ItineraryBuilder {
   private generateDescription(destination: Destination): string {
     const category = destination.category[0]?.toLowerCase() || 'attraction';
     const name = destination.name;
-    
+
     const descriptions: Record<string, string> = {
       'restaurant': `Experience authentic local cuisine at ${name}, offering a delightful dining experience.`,
       'cafe': `Relax and enjoy quality coffee and light meals at ${name}, perfect for a break.`,
@@ -894,7 +894,7 @@ export class ItineraryBuilder {
    */
   private estimateDuration(categories: string[]): string {
     const categoryStr = categories.join(',').toLowerCase();
-    
+
     if (categoryStr.includes('museum') || categoryStr.includes('galleries')) {
       return '2-3h';
     }
@@ -907,7 +907,7 @@ export class ItineraryBuilder {
     if (categoryStr.includes('monument') || categoryStr.includes('architecture')) {
       return '30min-1h';
     }
-    
+
     return '1-2h'; // default
   }
 
@@ -916,7 +916,7 @@ export class ItineraryBuilder {
    */
   private estimateCost(categories: string[]): string {
     const categoryStr = categories.join(',').toLowerCase();
-    
+
     if (categoryStr.includes('museum')) {
       return '$15-25';
     }
@@ -929,7 +929,7 @@ export class ItineraryBuilder {
     if (categoryStr.includes('monument')) {
       return '$10-20';
     }
-    
+
     return '$10-30'; // default
   }
 

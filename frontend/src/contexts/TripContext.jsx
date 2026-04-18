@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const TripContext = createContext();
 
@@ -11,26 +11,49 @@ export const useTrip = () => {
 };
 
 export const TripProvider = ({ children }) => {
-  const [tripData, setTripData] = useState({
-    // Destinations data
-    cities: [],
-    startDate: null,
-    totalDays: null,
+  const [tripData, setTripData] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tripData');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error('Failed to parse tripData from localStorage', e);
+    }
     
-    // Budget data - start with null/empty values
-    budget: null,
-    budgetMode: 'capped', // Remember budget mode preference
-    
-    // Preferences data - start with null/empty values
-    people: null,
-    travelType: null,
-    
-    // Results data
-    selectedTrip: null,
+    return {
+      cities: [],
+      startDate: null,
+      totalDays: null,
+      budget: null,
+      budgetMode: 'capped',
+      people: null,
+      travelType: null,
+      selectedTrip: null,
+    };
   });
 
+  useEffect(() => {
+    localStorage.setItem('tripData', JSON.stringify(tripData));
+  }, [tripData]);
+
   const updateTripData = (newData) => {
-    setTripData(prev => ({ ...prev, ...newData }));
+    setTripData(prev => {
+      // If the user is modifying trip parameters (cities, dates, budget, etc.)
+      // we must invalidate the previously generated itinerary so a new one can be generated.
+      const isModifyingParameters = 
+        ('cities' in newData) || 
+        ('startDate' in newData) || 
+        ('budget' in newData) || 
+        ('people' in newData) || 
+        ('travelType' in newData);
+        
+      if (isModifyingParameters && !('generatedItinerary' in newData)) {
+        return { ...prev, ...newData, generatedItinerary: null, itineraryMarkdown: null };
+      }
+      
+      return { ...prev, ...newData };
+    });
   };
 
   const resetTripData = () => {

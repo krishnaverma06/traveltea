@@ -221,7 +221,7 @@ export class TravelAgent {
             detectedCategories.length > 0
               ? detectedCategories
               : [this.extractCategory(userQuery)].filter(Boolean);
-              
+
           if (normalizedIntent === "search_hotels") {
             categories = ["accomodations"];
           }
@@ -491,10 +491,10 @@ export class TravelAgent {
         }
       } else {
         // No tool results, use LLM to generate conversational response
-        const combinedSystemPrompt = state.ragContext 
-          ? `${TRAVEL_AGENT_SYSTEM_PROMPT}\n\n${state.ragContext}` 
+        const combinedSystemPrompt = state.ragContext
+          ? `${TRAVEL_AGENT_SYSTEM_PROMPT}\n\n${state.ragContext}`
           : TRAVEL_AGENT_SYSTEM_PROMPT;
-          
+
         const messages = [
           new SystemMessage(combinedSystemPrompt),
           new HumanMessage(state.userQuery),
@@ -684,8 +684,8 @@ Rules:
 - Write like an experienced travel guide.
 `;
 
-    const combinedSystemPrompt = ragContext 
-      ? `${TRAVEL_AGENT_SYSTEM_PROMPT}\n\n${ragContext}` 
+    const combinedSystemPrompt = ragContext
+      ? `${TRAVEL_AGENT_SYSTEM_PROMPT}\n\n${ragContext}`
       : TRAVEL_AGENT_SYSTEM_PROMPT;
 
     const messages = [
@@ -867,10 +867,10 @@ Rules:
       try {
         console.log(`🔍 [RAG] Generating embedding for user query...`);
         const queryEmbedding = await generateEmbedding(userQuery);
-        
+
         console.log(`🔍 [RAG] Retrieving semantic knowledge...`);
         const retrievedDocs = await VectorRetrievalService.retrieveRelevantKnowledge(queryEmbedding, userId);
-        
+
         console.log(`📝 [RAG] Building prompt context...`);
         ragContext = PromptBuilder.buildRagContextPrompt(retrievedDocs);
       } catch (ragError: any) {
@@ -914,101 +914,76 @@ Rules:
 
   /**
    * Generate itinerary with structured trip context
-   * This is optimized for the onboarding flow where we have complete trip details
+   *NEW: Uses Serp Api web search + Google Places API
    */
-   async generateItineraryWithContext(tripContext: any): Promise<any> {
+  async generateItineraryWithContext(tripContext: any): Promise<any> {
     try {
-      console.log('\n🎯 [CONTEXT ITINERARY] Generating with full trip context');
-      
+      console.log('\n🎯 [ENHANCED ITINERARY] Generating with OpenAI web search + Google Places API');
+
       const { TRAVEL_TYPE_PREFERENCES, calculateDailyBudget } = await import('../types/tripContext.js');
-      
+      const { enhancedItineraryBuilder } = await import('../services/enhancedItineraryBuilder.js');
+
       // Calculate total days from cities
       const totalDays = tripContext.cities.reduce((sum: number, city: any) => sum + city.days, 0);
-      
+
       // Get daily budget breakdown
       const dailyBudget = calculateDailyBudget(
         tripContext.budget,
         tripContext.budgetMode,
         totalDays
       );
-      
+
       // Get travel type preferences
       const travelPrefs = TRAVEL_TYPE_PREFERENCES[tripContext.travelType as keyof typeof TRAVEL_TYPE_PREFERENCES];
-      
+
       console.log('💰 Daily budget:', dailyBudget);
       console.log('🎨 Travel preferences:', travelPrefs);
       console.log('🗓️ Total days:', totalDays);
       console.log('🏙️ Cities:', tripContext.cities.map((c: any) => `${c.name} (${c.days} days)`));
-      
-      // Collect all places from all cities first for better distribution
-      const allCityPlaces: Map<string, any> = new Map();
-      
-      for (const city of tripContext.cities) {
-        console.log(`\n🔍 Fetching enhanced places for ${city.name}`);
-        
-        // Get city coordinates
-        const coords = await itineraryBuilder.getDestinationCoords(city.name);
-        if (coords) {
-          // Fetch enhanced places including hotels and trip-type specific activities
-          const cityPlaces = await itineraryBuilder.fetchEnhancedPlaces(
-            coords.lat,
-            coords.lon,
-            travelPrefs.categories,
-            tripContext.travelType,
-            true // Include hotels
-          );
-          
-          allCityPlaces.set(city.name, {
-            places: cityPlaces,
-            coords: coords,
-            days: city.days
-          });
-          
-          console.log(`✅ Found ${cityPlaces.total} enhanced places in ${city.name} (${cityPlaces.activities.length} activities, ${cityPlaces.restaurants.length} restaurants, ${cityPlaces.hotels.length} hotels)`);
-        }
-      }
-      
-      // Build itinerary with intelligent distribution
+
+      // Build itineraries for each city using enhanced builder
       const allDays: any[] = [];
       let currentDayNumber = 1;
-      
-      // Global tracking to prevent repetition across all days
-      const globalUsedPlaces = new Set<string>();
-      
+
       for (const city of tripContext.cities) {
-        const cityData = allCityPlaces.get(city.name);
-        if (!cityData) continue;
-        
-        console.log(`\n�️ Building ${city.days} days for ${city.name}`);
-        
-        // Build city-specific itinerary with global state tracking
-        const cityItinerary = await itineraryBuilder.buildItineraryWithContextAndState(
+        console.log(`\n🌐 [WEB SEARCH] Processing ${city.name} (${city.days} days)`);
+
+        // Use enhanced builder with web search + Google Places
+        const cityItinerary = await enhancedItineraryBuilder.buildItineraryWithWebSearch(
           city.name,
           city.days,
           {
+            travelType: tripContext.travelType,
+            preferences: travelPrefs.categories,
             dailyBudget: dailyBudget.activities,
-            preferredCategories: travelPrefs.categories,
             activityLevel: travelPrefs.activityLevel,
             pacing: travelPrefs.pacing,
-            numberOfPeople: tripContext.people,
-            places: cityData.places,
-            coords: cityData.coords,
-            globalUsedPlaces: globalUsedPlaces, // Pass global state
-            startingDayNumber: currentDayNumber
+            numberOfPeople: tripContext.people
           }
         );
-        
+
         if (cityItinerary && cityItinerary.days) {
           // Add city-specific days to all days
           cityItinerary.days.forEach((day: any) => {
+            day.dayNumber = currentDayNumber++;
             day.city = city.name;
             allDays.push(day);
           });
-          
-          currentDayNumber += city.days;
+
+          console.log(`✅ Generated ${cityItinerary.days.length} days for ${city.name}`);
+        } else {
+          console.error(`❌ Failed to generate itinerary for ${city.name}`);
         }
       }
-      
+
+      if (allDays.length === 0) {
+        return {
+          response: null,
+          itinerary: null,
+          error: 'Failed to generate itinerary for any city'
+        };
+      }
+
       // Create complete itinerary
       const completeItinerary = {
         tripMetadata: {
@@ -1025,20 +1000,151 @@ Rules:
         },
         days: allDays
       };
-      
+
       // Format the response
       const formattedResponse = this.formatItineraryWithContext(completeItinerary, tripContext);
-      
-      console.log(`✅ [CONTEXT ITINERARY] Successfully generated ${allDays.length}-day itinerary`);
-      console.log(`📊 Total activities: ${allDays.reduce((sum, day) => 
+
+      console.log(`\n✅ [ENHANCED ITINERARY] Successfully generated ${allDays.length}-day itinerary`);
+      console.log(`📊 Total activities: ${allDays.reduce((sum, day) =>
         sum + day.timeSlots.reduce((s: number, slot: any) => s + slot.activities.length, 0), 0)}`);
-      
+
       return {
         response: formattedResponse,
         itinerary: completeItinerary,
         error: null
       };
-      
+    } catch (error) {
+      console.error('❌ [ENHANCED ITINERARY] Error:', error);
+      return {
+        response: null,
+        itinerary: null,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+  async generateItineraryWithContext_OLD(tripContext: any): Promise<any> {
+    try {
+      console.log('\n🎯 [CONTEXT ITINERARY] Generating with full trip context');
+
+      const { TRAVEL_TYPE_PREFERENCES, calculateDailyBudget } = await import('../types/tripContext.js');
+
+      // Calculate total days from cities
+      const totalDays = tripContext.cities.reduce((sum: number, city: any) => sum + city.days, 0);
+
+      // Get daily budget breakdown
+      const dailyBudget = calculateDailyBudget(
+        tripContext.budget,
+        tripContext.budgetMode,
+        totalDays
+      );
+
+      // Get travel type preferences
+      const travelPrefs = TRAVEL_TYPE_PREFERENCES[tripContext.travelType as keyof typeof TRAVEL_TYPE_PREFERENCES];
+
+      console.log('💰 Daily budget:', dailyBudget);
+      console.log('🎨 Travel preferences:', travelPrefs);
+      console.log('🗓️ Total days:', totalDays);
+      console.log('🏙️ Cities:', tripContext.cities.map((c: any) => `${c.name} (${c.days} days)`));
+
+      // Collect all places from all cities first for better distribution
+      const allCityPlaces: Map<string, any> = new Map();
+
+      for (const city of tripContext.cities) {
+        console.log(`\n🔍 Fetching enhanced places for ${city.name}`);
+
+        // Get city coordinates
+        const coords = await itineraryBuilder.getDestinationCoords(city.name);
+        if (coords) {
+          // Fetch enhanced places including hotels and trip-type specific activities
+          const cityPlaces = await itineraryBuilder.fetchEnhancedPlaces(
+            coords.lat,
+            coords.lon,
+            travelPrefs.categories,
+            tripContext.travelType,
+            true // Include hotels
+          );
+
+          allCityPlaces.set(city.name, {
+            places: cityPlaces,
+            coords: coords,
+            days: city.days
+          });
+
+          console.log(`✅ Found ${cityPlaces.total} enhanced places in ${city.name} (${cityPlaces.activities.length} activities, ${cityPlaces.restaurants.length} restaurants, ${cityPlaces.hotels.length} hotels)`);
+        }
+      }
+
+      // Build itinerary with intelligent distribution
+      const allDays: any[] = [];
+      let currentDayNumber = 1;
+
+      // Global tracking to prevent repetition across all days
+      const globalUsedPlaces = new Set<string>();
+
+      for (const city of tripContext.cities) {
+        const cityData = allCityPlaces.get(city.name);
+        if (!cityData) continue;
+
+        console.log(`\n�️ Building ${city.days} days for ${city.name}`);
+
+        // Build city-specific itinerary with global state tracking
+        const cityItinerary = await itineraryBuilder.buildItineraryWithContextAndState(
+          city.name,
+          city.days,
+          {
+            dailyBudget: dailyBudget.activities,
+            preferredCategories: travelPrefs.categories,
+            activityLevel: travelPrefs.activityLevel,
+            pacing: travelPrefs.pacing,
+            numberOfPeople: tripContext.people,
+            places: cityData.places,
+            coords: cityData.coords,
+            globalUsedPlaces: globalUsedPlaces, // Pass global state
+            startingDayNumber: currentDayNumber
+          }
+        );
+
+        if (cityItinerary && cityItinerary.days) {
+          // Add city-specific days to all days
+          cityItinerary.days.forEach((day: any) => {
+            day.city = city.name;
+            allDays.push(day);
+          });
+
+          currentDayNumber += city.days;
+        }
+      }
+
+      // Create complete itinerary
+      const completeItinerary = {
+        tripMetadata: {
+          destination: tripContext.cities.map((c: any) => c.name).join(' → '),
+          duration: totalDays,
+          startDate: tripContext.startDate,
+          travelType: tripContext.travelType,
+          numberOfPeople: tripContext.people,
+          budget: {
+            total: tripContext.budget.total,
+            perDay: dailyBudget.totalPerDay,
+            breakdown: dailyBudget
+          }
+        },
+        days: allDays
+      };
+
+      // Format the response
+      const formattedResponse = this.formatItineraryWithContext(completeItinerary, tripContext);
+
+      console.log(`✅ [CONTEXT ITINERARY] Successfully generated ${allDays.length}-day itinerary`);
+      console.log(`📊 Total activities: ${allDays.reduce((sum, day) =>
+        sum + day.timeSlots.reduce((s: number, slot: any) => s + slot.activities.length, 0), 0)}`);
+
+      return {
+        response: formattedResponse,
+        itinerary: completeItinerary,
+        error: null
+      };
+
     } catch (error) {
       console.error('❌ Error generating context itinerary:', error);
       return {
