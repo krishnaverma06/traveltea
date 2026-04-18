@@ -25,6 +25,7 @@ import UpcomingTripsPage from "./pages/UpcomingTripsPage";
 import TripsPage from "./pages/TripsPage";
 import ExplorePage from "./pages/ExplorePage";
 import ProfilePage from "./pages/ProfilePage";
+import FloatingAssistant from "./components/FloatingAssistant";
 
 const ProtectedRoute = ({
   children,
@@ -63,6 +64,7 @@ const AppContent = () => {
 
   return (
     <Router>
+      <FloatingAssistant />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route
