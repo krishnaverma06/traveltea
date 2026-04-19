@@ -95,6 +95,40 @@ const itinerarySchema = new mongoose.Schema(
   { _id: false }
 );
 
+const revisionSchema = new mongoose.Schema(
+  {
+    timestamp: { type: Date, default: Date.now },
+    mutationId: { type: String, required: true },
+    action: { type: String, required: true },
+    before: { type: mongoose.Schema.Types.Mixed },
+    after: { type: mongoose.Schema.Types.Mixed },
+    aiSummary: { type: String }
+  },
+  { _id: false }
+);
+
+const timelineSchema = new mongoose.Schema(
+  {
+    weather: { type: mongoose.Schema.Types.Mixed }, 
+    events: { type: [mongoose.Schema.Types.Mixed] }, 
+    restaurants: { type: mongoose.Schema.Types.Mixed }, 
+    generatedAt: { type: Date, default: Date.now },
+    lastUpdated: { type: Date, default: Date.now },
+    providerStatus: {
+      weather: { type: String, enum: ['success', 'unavailable'] },
+      events: { type: String, enum: ['success', 'unavailable'] }
+    },
+    futureProviders: {
+      hotels: { type: mongoose.Schema.Types.Mixed }, 
+      flights: { type: mongoose.Schema.Types.Mixed } 
+    },
+    version: { type: Number, default: 0 },
+    currentRevisionIndex: { type: Number, default: -1 },
+    revisions: { type: [revisionSchema], default: [] }
+  },
+  { _id: false }
+);
+
 const savedTripSchema = new mongoose.Schema(
   {
     user: {
@@ -144,6 +178,7 @@ const savedTripSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    timeline: { type: timelineSchema }
   },
   { timestamps: true }
 );

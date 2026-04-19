@@ -57,8 +57,16 @@ export function useSocket(conversationId) {
           message: data.message,
           conversationId: data.conversationId,
           itinerary: data.itinerary,
+          updatedTrip: data.updatedTrip,
         })
       );
+    });
+
+    socket.on('itinerary_updated', (data) => {
+      console.log('[SOCKET] Received itinerary_updated for trip:', data.savedTripId);
+      // We can broadcast this via a custom event so other components (like ItinearyPage) can pick it up
+      const event = new CustomEvent('trip_mutated', { detail: data });
+      window.dispatchEvent(event);
     });
 
     socket.on('agent:error', (data) => {

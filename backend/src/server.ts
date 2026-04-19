@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -14,6 +15,7 @@ import itineraryRoutes from './routes/itinerary.js';
 import savedTripRoutes from './routes/savedTripRoutes.js'
 import searchRoutes from './routes/searchRoutes.js'
 import exploreRoutes from './routes/exploreRoutes.js'
+import travelDataRoutes from './routes/travelDataRoutes.js'
 
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
@@ -24,7 +26,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 console.log('🔑 Environment check:');
 console.log('  - GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ Loaded' : '❌ Missing');
 console.log('  - OPENTRIPMAP_API_KEY:', process.env.OPENTRIPMAP_API_KEY ? '✅ Loaded' : '❌ Missing');
-console.log('  - SERP_API_KEY:', process.env.SERPAPI_API_KEY ? "✅ Loaded" : "Missing");
+console.log('  - SERP_API_KEY:', (process.env.SERPAPI_API_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_KEY) ? "✅ Loaded" : "Missing");
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -65,6 +67,7 @@ app.use("/api/trips", tripRoutes);
 app.use("/api/saved-trips", savedTripRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/explore", exploreRoutes);
+app.use("/api/travel-data", travelDataRoutes);
 
 // Set Socket.io instance for chat controller
 setSocketIO(io);

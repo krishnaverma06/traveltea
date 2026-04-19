@@ -37,6 +37,28 @@ export const TripProvider = ({ children }) => {
     localStorage.setItem('tripData', JSON.stringify(tripData));
   }, [tripData]);
 
+  useEffect(() => {
+    const handleTripMutated = (event) => {
+      const { tripData: updatedTrip } = event.detail;
+      if (updatedTrip) {
+        // If the updated trip matches the current trip, update it
+        setTripData(prev => {
+          // In some cases we might only have generatedItinerary or similar in state
+          // For now, if an update comes in, we assume it's for the currently active trip
+          return {
+            ...prev,
+            ...updatedTrip,
+            generatedItinerary: updatedTrip.generatedItinerary || prev.generatedItinerary,
+            timeline: updatedTrip.timeline || prev.timeline
+          };
+        });
+      }
+    };
+
+    window.addEventListener('trip_mutated', handleTripMutated);
+    return () => window.removeEventListener('trip_mutated', handleTripMutated);
+  }, []);
+
   const updateTripData = (newData) => {
     setTripData(prev => {
       // If the user is modifying trip parameters (cities, dates, budget, etc.)

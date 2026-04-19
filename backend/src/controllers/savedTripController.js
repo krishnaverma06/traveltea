@@ -4,7 +4,8 @@ import { getOpenTripMapAPI } from "../mcp-servers/places/api.js";
 import { generateEmbedding, buildTripSummary } from "../services/embedding.js";
 import { ingestTripKnowledge, updateTripKnowledge, deleteTripKnowledge } from "../vector/services/trip-knowledge.service.js";
 import { updateUserProfileKnowledge } from "../vector/services/user-profile.service.js";
-
+import { weatherService } from "../services/weatherService.js";
+import { ticketmasterService } from "../services/ticketmasterService.js";
 // Escape regex metacharacters so user-supplied search text can't be used
 // to build unexpected/expensive patterns.
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -107,6 +108,62 @@ export const saveTrip = async (req, res) => {
       updateUserProfileKnowledge(req.userId).catch(err => 
         console.error('⚠️ User profile update failed:', err.message)
       );
+
+      // Fire-and-forget: enrich timeline data (Weather & Events)
+      (async () => {
+        try {
+          const { weatherService } = await import('../services/weatherService.js');
+          const { ticketmasterService } = await import('../services/ticketmasterService.js');
+          
+          const mainCity = savedTrip.cities[0];
+          if (!mainCity) return;
+          
+          const lat = mainCity.coordinates?.lat || 0;
+          const lon = mainCity.coordinates?.lng || 0;
+          const startDate = new Date(savedTrip.startDate).toISOString().split('T')[0];
+          
+          const endDateObj = new Date(savedTrip.startDate);
+          endDateObj.setDate(endDateObj.getDate() + savedTrip.totalDays - 1);
+          const endDate = endDateObj.toISOString().split('T')[0];
+
+          const dates = [];
+          for (let i = 0; i < savedTrip.totalDays; i++) {
+            const d = new Date(savedTrip.startDate);
+            d.setDate(d.getDate() + i);
+            dates.push(d.toISOString().split('T')[0]);
+          }
+
+          console.log(`⏳ Starting background timeline enrichment for trip ${savedTrip._id}`);
+          const results = await Promise.allSettled([
+            weatherService.getMappedForecast(lat, lon, dates),
+            ticketmasterService.getEvents(mainCity.name, startDate, endDate)
+          ]);
+
+          const weatherData = results[0].status === 'fulfilled' ? results[0].value : null;
+          const eventsData = results[1].status === 'fulfilled' ? results[1].value : [];
+
+          await SavedTrip.updateOne(
+            { _id: savedTrip._id },
+            { 
+              $set: { 
+                timeline: {
+                  weather: weatherData,
+                  events: eventsData,
+                  generatedAt: new Date(),
+                  lastUpdated: new Date(),
+                  providerStatus: {
+                    weather: results[0].status === 'fulfilled' ? 'success' : 'unavailable',
+                    events: results[1].status === 'fulfilled' ? 'success' : 'unavailable'
+                  }
+                }
+              } 
+            }
+          );
+          console.log(`✅ Background timeline enrichment completed for trip ${savedTrip._id}`);
+        } catch (err) {
+          console.error('⚠️ Timeline enrichment failed:', err);
+        }
+      })();
     })();
 
     res.status(201).json({
@@ -377,5 +434,31 @@ export const semanticSearchTrips = async (req, res) => {
         details: error.message,
       });
     }
+  }
+};
+
+// Update timeline restaurants
+export const updateTimelineRestaurants = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { restaurants } = req.body;
+
+    const savedTrip = await SavedTrip.findOneAndUpdate(
+      { _id: id, user: req.userId },
+      { $set: { "timeline.restaurants": restaurants, "timeline.lastUpdated": new Date() } },
+      { new: true }
+    );
+
+    if (!savedTrip) {
+      return res.status(404).json({ error: "Saved trip not found" });
+    }
+
+    res.json(savedTrip);
+  } catch (error) {
+    console.error("Error updating timeline restaurants:", error);
+    res.status(500).json({
+      error: "Failed to update timeline restaurants",
+      details: error.message,
+    });
   }
 };

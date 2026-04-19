@@ -37,19 +37,20 @@ export class EnhancedItineraryBuilder {
                 30 // Get 30 attractions to filter down
             );
 
-            if (webSearchResults.attractions.length === 0) {
-                console.error('❌ No attractions found from Gemini search');
-                return null;
+            if (!webSearchResults || !webSearchResults.attractions || webSearchResults.attractions.length === 0) {
+                console.warn('⚠️ No attractions generated from Gemini, proceeding with empty attractions to allow fallback.');
             }
+
+            const rawAttractions = webSearchResults?.attractions || [];
 
             // STEP 2: Filter by alignment and popularity
             const filteredAttractions = geminiWebSearch.filterByAlignment(
-                webSearchResults.attractions,
+                rawAttractions,
                 context.travelType,
                 context.preferences
             );
 
-            console.log(`✅ [GEMINI SEARCH] ${webSearchResults.attractions.length} total, ${filteredAttractions.length} after filtering`);
+            console.log(`✅ [GEMINI SEARCH] ${rawAttractions.length} total, ${filteredAttractions.length} after filtering`);
 
             // [OPTIMIZATION] Pre-filter exact count required before expensive API enrichment
             const activitiesPerDay = this.calculateActivitiesPerDay(context.pacing, context.activityLevel);

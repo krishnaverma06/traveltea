@@ -15,7 +15,7 @@ export class WebSearchAPI {
 
   constructor(apiKey?: string) {
     // Ensure SERPAPI_API_KEY is defined in your .env file
-    this.apiKey = apiKey || process.env.SERPAPI_API_KEY || '';
+    this.apiKey = apiKey || process.env.SERPAPI_API_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_KEY || '';
   }
   
   /**

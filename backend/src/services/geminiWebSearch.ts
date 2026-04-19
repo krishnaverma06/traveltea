@@ -49,17 +49,37 @@ export class GeminiWebSearchService {
         console.log(`🌐 [GEMINI + SERPAPI] Searching web for ${city}...`);
 
         try {
-            // 1. Bump num to 30 to ensure enough data for 3+ full days
-            const searchResponse = await getJson({
-                engine: 'google',
-                q: `must visit attractions itineraries travel guide in ${city} ${travelType} ${preferences.join(' ')}`,
-                api_key: process.env.SERPAPI_API_KEY,
-                num: 30
-            });
+            // Debugging and Graceful Fallback
+            console.log(`✓ dotenv loaded successfully: ${process.env.NODE_ENV !== undefined}`);
+            
+            const apiKey = process.env.SERPAPI_API_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_KEY;
+            
+            let searchSnippets = '';
 
-            const searchSnippets = (searchResponse.organic_results || [])
-                .map((res: any, idx: number) => `[${idx + 1}] ${res.title}\nSnippet: ${res.snippet}\nImage URL: ${res.thumbnail || res.pagemap?.cse_image?.[0]?.src || ''}`)
-                .join('\n\n');
+            if (!apiKey) {
+                console.warn(`⚠️ SERPAPI_API_KEY not configured. Skipping web search.`);
+                console.log("No web attractions found. Using Gemini itinerary generation.");
+            } else {
+                console.log(`✓ SERPAPI_API_KEY loaded\nLength: ${apiKey.length}`);
+                try {
+                    // 1. Bump num to 30 to ensure enough data for 3+ full days
+                    const searchResponse = await getJson({
+                        engine: 'google',
+                        q: `must visit attractions itineraries travel guide in ${city} ${travelType} ${preferences.join(' ')}`,
+                        api_key: apiKey,
+                        num: 30
+                    });
+
+                    searchSnippets = (searchResponse.organic_results || [])
+                        .map((res: any, idx: number) => `[${idx + 1}] ${res.title}\nSnippet: ${res.snippet}\nImage URL: ${res.thumbnail || res.pagemap?.cse_image?.[0]?.src || ''}`)
+                        .join('\n\n');
+                } catch (searchError) {
+                    console.warn(`⚠️ SerpAPI request failed, skipping web search:`, searchError);
+                    console.log("No web attractions found. Using Gemini itinerary generation.");
+                }
+            }
+
+            const hasWebContext = searchSnippets.trim().length > 0;
 
             // 2. Strict prompt ensuring comprehensive coverage
             const prompt = `You are an expert travel planner crafting a full multi-day itinerary context.
@@ -70,20 +90,19 @@ export class GeminiWebSearchService {
 - Preferences: ${preferences.join(', ')}
 
 **Instructions:**
-1. Extract at least ${numberOfAttractions} distinct attractions and activities from the search snippets below.
+1. ${hasWebContext ? `Extract at least ${numberOfAttractions} distinct attractions and activities from the search snippets below.` : `Generate at least ${numberOfAttractions} distinct attractions and activities for this destination.`}
 2. Ensure you extract enough varied activities (morning spots, afternoon highlights, evening dinner/nightlife options) to fully populate every single day of a 3+ day trip without empty days.
 3. Mark high-priority landmarks as 'mustVisit: true'.
 
-**Search Results:**
-${searchSnippets}`;
+${hasWebContext ? `**Search Results:**\n${searchSnippets}` : ''}`;
 
             const result = await this.structuredModel.invoke(prompt);
-            console.log(`✅ [GEMINI SEARCH] Successfully parsed ${result.attractions.length} attractions in ${city}`);
+            console.log(`✅ [GEMINI SEARCH] Successfully generated/parsed ${result.attractions?.length || 0} attractions in ${city}`);
 
-            return result;
+            return result || { city, country: '', attractions: [], localTips: [] };
 
         } catch (error) {
-            console.error('❌ [GEMINI/SERPAPI SEARCH] Error:', error);
+            console.error('❌ [GEMINI SEARCH] Fatal error:', error);
             return {
                 city,
                 country: '',
@@ -95,10 +114,15 @@ ${searchSnippets}`;
 
     async findImageForAttraction(query: string): Promise<string | null> {
         try {
+            const apiKey = process.env.SERPAPI_API_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_KEY;
+            if (!apiKey) {
+                return null;
+            }
+
             const searchResponse = await getJson({
                 engine: 'google_images',
                 q: query,
-                api_key: process.env.SERPAPI_API_KEY,
+                api_key: apiKey,
                 num: 1
             });
             if (searchResponse.images_results && searchResponse.images_results.length > 0) {

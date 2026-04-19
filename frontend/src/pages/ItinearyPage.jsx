@@ -42,13 +42,15 @@ import {
   EyeOff,
   Loader2,
   Clock,
+  LayoutTemplate
 } from "lucide-react";
+import { TimelineTab } from "@/components/Timeline/TimelineTab";
 
 const ItineraryPage = () => {
   const navigate = useNavigate();
   const { tripData } = useTrip();
   const { isAuthenticated, user } = useAuth();
-  const [activeTab, setActiveTab] = useState("itinerary");
+  const [activeTab, setActiveTab] = useState("timeline");
   const [selectedDay, setSelectedDay] = useState(1);
   const [completedActivities, setCompletedActivities] = useState(new Set());
   const [isLoading, setIsLoading] = useState(false);
@@ -599,12 +601,18 @@ const ItineraryPage = () => {
         <div className="w-80 bg-white/50 backdrop-blur-sm border-r border-gray-200/50 overflow-y-auto">
           {/* Tabs */}
           <div className="p-6 border-b border-gray-200/50">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {[
+                {
+                  id: "timeline",
+                  icon: LayoutTemplate,
+                  label: "Timeline",
+                  color: "orange",
+                },
                 {
                   id: "itinerary",
                   icon: List,
-                  label: "Itinerary",
+                  label: "Day View",
                   color: "blue",
                 },
                 {
@@ -719,6 +727,13 @@ const ItineraryPage = () => {
 
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
+          {/* Timeline Tab */}
+          {activeTab === "timeline" && (
+            <div className="h-full w-full bg-white/50 backdrop-blur-sm rounded-xl overflow-hidden">
+              <TimelineTab tripData={tripData} savedTripId={tripData?.savedTripId} />
+            </div>
+          )}
+
           {/* Itinerary Tab */}
           {activeTab === "itinerary" && selectedDayData && (
             <div className="p-8">

@@ -297,6 +297,79 @@ export class GooglePlacesAPI {
 
         return '$10-30'; // Default
     }
+
+    /**
+     * Fetch nearby restaurants around a coordinate
+     */
+    async getNearbyRestaurants(lat: number, lon: number): Promise<any[]> {
+        const currentKey = this.key;
+        if (!currentKey) {
+            console.warn('Google Places API key not configured. Returning empty restaurants.');
+            return [];
+        }
+
+        // We use a custom cache key since this method relies on the new models
+        const cacheKey = `restaurants:${Math.round(lat*100)},${Math.round(lon*100)}`;
+        if (this.cache.has(cacheKey)) {
+            return this.cache.get(cacheKey);
+        }
+
+        try {
+            const response = await axios.post(
+                `${PLACES_API_BASE}/places:searchNearby`,
+                {
+                    includedTypes: ["restaurant", "cafe"],
+                    maxResultCount: 5,
+                    locationRestriction: {
+                        circle: {
+                            center: { latitude: lat, longitude: lon },
+                            radius: 1500.0 // 1.5km
+                        }
+                    }
+                },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Goog-Api-Key': currentKey,
+                        'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.priceLevel,places.primaryTypeDisplayName,places.location,places.googleMapsUri,places.photos'
+                    }
+                }
+            );
+
+            const places = response.data.places || [];
+            
+            const normalized = places.map((place: any) => {
+                const photos = place.photos || [];
+                // Get the first photo name to construct URL later if needed, or pass it directly.
+                // The Places API requires a separate call to fetch the actual photo URL, so we construct the URL pattern.
+                let photoUrl = null;
+                if (photos.length > 0) {
+                    photoUrl = `https://places.googleapis.com/v1/${photos[0].name}/media?maxHeightPx=400&maxWidthPx=400&key=${currentKey}`;
+                }
+
+                return {
+                    id: place.id,
+                    name: place.displayName?.text || 'Unknown',
+                    rating: place.rating || 0,
+                    reviewCount: place.userRatingCount || 0,
+                    cuisine: place.primaryTypeDisplayName ? [place.primaryTypeDisplayName.text] : [],
+                    priceLevel: this.formatPriceLevel(place.priceLevel) || null,
+                    mapsUrl: place.googleMapsUri || '',
+                    imageUrl: photoUrl,
+                    location: {
+                        latitude: place.location?.latitude || lat,
+                        longitude: place.location?.longitude || lon
+                    }
+                };
+            });
+
+            this.cache.set(cacheKey, normalized);
+            return normalized;
+        } catch (error: any) {
+            console.error('Error fetching nearby restaurants:', error.response?.data || error.message);
+            return [];
+        }
+    }
 }
 
 // Export singleton

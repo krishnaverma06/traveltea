@@ -23,7 +23,7 @@ export function setSocketIO(socketIO: SocketIOServer) {
  */
 export async function sendMessage(req: Request, res: Response) {
   try {
-    const { message, conversationId } = req.body;
+    const { message, conversationId, activeTripId, timelineVersion, mutationId } = req.body;
 
     // Validate input
     if (!message || typeof message !== 'string') {
@@ -72,12 +72,19 @@ export async function sendMessage(req: Request, res: Response) {
     });
     
     const agentResult  = await Promise.race([
-      travelAgent.chat(message, convId, req.userId),
+      travelAgent.chat(message, convId, req.userId, activeTripId, timelineVersion, mutationId),
       timeoutPromise
     ]);
 
      // Extract the response string from the agent result
-    const aiResponse = agentResult.response || 'I apologize, but I had trouble processing your request.';
+    let aiResponse = agentResult.response || 'I apologize, but I had trouble processing your request.';
+    if (Array.isArray(aiResponse)) {
+      console.warn("⚠️ [CHAT CONTROLLER] Warning: agentResult.response was an array. Stringifying...");
+      aiResponse = aiResponse.map(r => typeof r === 'string' ? r : JSON.stringify(r)).join(' ');
+    } else if (typeof aiResponse !== 'string') {
+      console.warn("⚠️ [CHAT CONTROLLER] Warning: agentResult.response was not a string. Casting...");
+      aiResponse = String(aiResponse);
+    }
 
     // Add AI response to conversation
     conversation.messages.push({
@@ -89,13 +96,52 @@ export async function sendMessage(req: Request, res: Response) {
     // Save AI message
     await conversation.save();
 
+    // Handle Timeline Mutations
+    let updatedTrip = null;
+    if (agentResult.mutations && agentResult.mutations.length > 0) {
+      try {
+        const { TimelineMutationEngine } = await import('../services/timelineMutationEngine.js');
+        
+        // Use activeTripId explicitly. Never fallback to latest.
+        if (!activeTripId) {
+          throw new Error('No activeTripId provided for timeline mutation.');
+        }
+
+        const mutationResult = await TimelineMutationEngine.applyMutations(
+          activeTripId, 
+          agentResult.mutations, 
+          timelineVersion, 
+          mutationId
+        );
+        
+        updatedTrip = mutationResult.trip;
+        
+        if (io) {
+          console.log('📡 [SOCKET] Emitting timeline_updated for trip:', activeTripId);
+          io.emit('timeline_updated', {
+            savedTripId: activeTripId,
+            tripData: updatedTrip,
+            mutations: agentResult.mutations,
+            mutationId
+          });
+        }
+      } catch (err: any) {
+        console.error("Failed to apply timeline mutations:", err);
+        // Overwrite aiResponse with validation error if needed
+        if (err.name === 'MutationValidationError') {
+           agentResult.response = `I couldn't apply your changes: ${err.message}`;
+        }
+      }
+    }
+
     // Emit completion only to sockets that joined this conversation's room
     console.log('📡 [SOCKET] Emitting agent:response for conversation:', convId);
     if (io) {
       io.to(convId).emit('agent:response', {
         message: aiResponse,
         conversationId: convId,
-        itinerary: agentResult.itinerary
+        itinerary: agentResult.itinerary,
+        updatedTrip: updatedTrip // Send it back just in case the client wants it
       });
       console.log('✅ [SOCKET] Event emitted successfully');
     } else {

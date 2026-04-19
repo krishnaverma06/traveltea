@@ -25,6 +25,9 @@ import { generateEmbedding } from "../services/embedding.js";
 import { VectorRetrievalService } from "../vector/services/vector-retrieval.service.js";
 import { PromptBuilder } from "../vector/utils/prompt-builder.js";
 
+// Deterministic Parser
+import { DeterministicCommandParser } from "../utils/deterministicParser.js";
+
 /**
  * Define agent state using Annotation API
  */
@@ -60,6 +63,22 @@ const AgentStateAnnotation = Annotation.Root({
   itinerary: Annotation<Itinerary | null | undefined>({
     reducer: (left, right) => right ?? left,
     default: () => undefined,
+  }),
+  activeTripId: Annotation<string | undefined>({
+    reducer: (left, right) => right ?? left,
+    default: () => undefined,
+  }),
+  timelineVersion: Annotation<number | undefined>({
+    reducer: (left, right) => right ?? left,
+    default: () => undefined,
+  }),
+  mutationId: Annotation<string | undefined>({
+    reducer: (left, right) => right ?? left,
+    default: () => undefined,
+  }),
+  mutations: Annotation<any[]>({
+    reducer: (left, right) => right ?? left,
+    default: () => [],
   }),
   response: Annotation<string | undefined>({
     reducer: (left, right) => right ?? left,
@@ -102,7 +121,7 @@ export class TravelAgent {
     this.model = new ChatGoogleGenerativeAI({
       model: config.modelName || process.env.GEMINI_MODEL || "gemini-3.1-flash-lite",
       temperature: config.temperature || 0.7,
-      maxOutputTokens: config.maxTokens || 1000,
+      maxOutputTokens: config.maxTokens || 4096,
       streaming: config.streaming || false,
       apiKey: process.env.GEMINI_API_KEY,
     });
@@ -119,9 +138,14 @@ export class TravelAgent {
     const workflow = new StateGraph(AgentStateAnnotation)
       .addNode("planner", this.plannerNode.bind(this))
       .addNode("tool_executor", this.toolExecutorNode.bind(this))
+      .addNode("timeline_editor", this.timelineEditorNode.bind(this))
       .addNode("response_formatter", this.responseFormatterNode.bind(this))
       .addEdge("__start__", "planner")
       .addConditionalEdges("planner", (state: AgentState) => {
+        if (state.intent === "edit_timeline") {
+          return "timeline_editor";
+        }
+        
         // Map new intent types to appropriate actions
         const intentsThatNeedTools = [
           "search_destination",
@@ -150,6 +174,7 @@ export class TravelAgent {
         return "response_formatter";
       })
       .addEdge("tool_executor", "response_formatter")
+      .addEdge("timeline_editor", "response_formatter")
       .addEdge("response_formatter", "__end__");
 
     return workflow.compile();
@@ -446,6 +471,119 @@ export class TravelAgent {
     }
   }
 
+  private async timelineEditorNode(
+    state: AgentState,
+  ): Promise<Partial<AgentState>> {
+    console.log("\n✏️ [TIMELINE EDITOR] Generating mutation for:", state.userQuery);
+    try {
+      // 1. Check for deterministic edit
+      const deterministicMutations = DeterministicCommandParser.parse(state.userQuery);
+      if (deterministicMutations) {
+        console.log("✏️ [TIMELINE EDITOR] Deterministic parser matched.");
+        return {
+          mutations: deterministicMutations,
+          response: "Applying your change...",
+          messages: [new AIMessage(`I've made the requested changes to your timeline.`)],
+        };
+      }
+
+      console.log("✏️ [TIMELINE EDITOR] Falling back to Gemini for complex edit.");
+
+      const editorPrompt = `You are an AI Timeline Editor. The user wants to modify their itinerary.
+Respond with ONLY a valid JSON array of mutations. Example:
+[
+  { "action": "move", "activityName": "Hemis Monastery", "toDay": 2, "newTime": "morning" },
+  { "action": "add", "activityName": "Louvre", "toDay": 1, "time": "morning" },
+  { "action": "delete", "activityName": "Pangong Lake" },
+  { "action": "swap_days", "day1": 1, "day2": 2 },
+  { "action": "change_time", "activityName": "Lunch", "newTime": "1 PM" },
+  { "action": "rename", "activityName": "Breakfast", "newName": "Brunch" },
+  { "action": "undo" },
+  { "action": "redo" }
+]
+Actions allowed: move, delete, add, replace, swap_activities, swap_days, change_time, rename, undo, redo.
+CRITICAL: Do NOT include markdown backticks. Just pure JSON. Do NOT add any explanation, prose, or surrounding text. Return ONLY the JSON array.
+User query: "${state.userQuery}"`;
+
+      const response = await this.model.invoke([
+        { role: 'system', content: editorPrompt },
+        { role: 'user', content: state.userQuery }
+      ]);
+
+      console.log("✏️ [TIMELINE EDITOR] Raw Gemini response object:", JSON.stringify(response, null, 2));
+
+      // 1. Check for max tokens truncation
+      const finishReason = response.response_metadata?.finishReason || response.response_metadata?.finish_reason;
+      const tokenUsage = response.response_metadata?.tokenUsage || response.response_metadata?.estimatedTokenUsage;
+      
+      console.log("✏️ [TIMELINE EDITOR] Generation Stats - Configured maxTokens: 4096, finishReason:", finishReason, ", tokenUsage:", tokenUsage);
+
+      if (finishReason === "MAX_TOKENS" || finishReason === "length") {
+        throw new Error(`LLM output was truncated due to token limit (MAX_TOKENS). The JSON is incomplete.`);
+      }
+
+      // Correctly extract the text from response.content
+      let extractedText = "";
+      if (Array.isArray(response.content)) {
+        extractedText = response.content.map((c: any) => c.text || JSON.stringify(c)).join("");
+      } else {
+        extractedText = String(response.content || "");
+      }
+      
+      console.log("✏️ [TIMELINE EDITOR] Extracted text before parsing:", extractedText);
+
+      // Strip markdown code fences if present
+      let cleanedText = extractedText.trim();
+      if (cleanedText.startsWith("```")) {
+        cleanedText = cleanedText.replace(/^```(json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+      }
+
+      const jsonMatch = cleanedText.match(/\[[\s\S]*\]/);
+      let mutations = [];
+      if (jsonMatch) {
+        try {
+          mutations = JSON.parse(jsonMatch[0]);
+        } catch (parseError) {
+          console.error("✏️ [TIMELINE EDITOR] JSON parsing failed!");
+          console.error("Raw response:", response);
+          console.error("Extracted text:", extractedText);
+          console.error("Parse error:", parseError);
+          throw new Error("Could not parse mutations from LLM response (JSON parse error)");
+        }
+      } else {
+        console.error("✏️ [TIMELINE EDITOR] No JSON array matched in text!");
+        console.error("Raw response:", response);
+        console.error("Extracted text:", extractedText);
+        throw new Error("Could not parse mutations from LLM response (No JSON array found)");
+      }
+
+      console.log("✏️ [TIMELINE EDITOR] Mutations:", mutations);
+      
+      return {
+        mutations: mutations,
+        response: "Updating your timeline...", 
+        messages: [new AIMessage(`I've made the requested changes to your timeline.`)],
+      };
+    } catch (error: any) {
+      console.error("Timeline Editor error:", error);
+      
+      let friendlyError = error.message;
+      if (error?.status === 429 || error.message?.includes('429 Too Many Requests') || error.message?.includes('quota')) {
+        console.error("🚨 [TIMELINE EDITOR] Quota Exceeded (429)");
+        friendlyError = "the AI service is temporarily unavailable due to high demand. Please try again in a few moments.";
+      } else if (error.message?.includes('parse') || error.message?.includes('JSON') || error.message?.includes('MAX_TOKENS')) {
+        console.error("🚨 [TIMELINE EDITOR] Parser Error: " + error.message);
+      } else {
+        console.error("🚨 [TIMELINE EDITOR] Mutation Error: " + error.message);
+      }
+
+      return {
+        error: friendlyError,
+        messages: [new AIMessage("I couldn't modify the timeline right now.")],
+      };
+    }
+  }
+
   /**
    * Response Formatter Node: Creates conversational response from tool results
    */
@@ -489,6 +627,8 @@ export class TravelAgent {
         } else {
           formattedResponse = this.formatPlaceDetails(placeDetails);
         }
+      } else if (intent === 'edit_timeline' && state.response) {
+        formattedResponse = state.response;
       } else {
         // No tool results, use LLM to generate conversational response
         const combinedSystemPrompt = state.ragContext
@@ -503,8 +643,26 @@ export class TravelAgent {
         console.log(
           "🤖 [FORMATTER] Calling Gemini with RAG context for conversational response...",
         );
-        const response = await this.model.invoke(messages);
-        formattedResponse = response.content as string;
+        
+        try {
+          const response = await this.model.invoke(messages);
+          
+          let contentStr = "";
+          if (Array.isArray(response.content)) {
+             contentStr = response.content.map((c: any) => c.text || JSON.stringify(c)).join("");
+          } else {
+             contentStr = String(response.content || "");
+          }
+          formattedResponse = contentStr;
+        } catch (error: any) {
+          if (error?.status === 429 || error.message?.includes('429 Too Many Requests') || error.message?.includes('quota')) {
+            console.error("🚨 [FORMATTER] Quota Exceeded (429) while generating conversational response");
+            formattedResponse = "I apologize, but the AI service is temporarily unavailable due to high demand. Please try again in a few moments.";
+          } else {
+            console.error("🚨 [FORMATTER] Error generating response:", error);
+            formattedResponse = "I apologize, but I encountered an error while processing your request.";
+          }
+        }
       }
 
       console.log("✅ [FORMATTER] Response generated successfully\n");
@@ -858,7 +1016,14 @@ Rules:
   /**
    * Main method: Process user query and return response
    */
-  async chat(userQuery: string, conversationId?: string, userId?: string): Promise<any> {
+  async chat(
+    userQuery: string, 
+    conversationId?: string, 
+    userId?: string, 
+    activeTripId?: string, 
+    timelineVersion?: number, 
+    mutationId?: string
+  ): Promise<any> {
     try {
       console.log(`\n🤖 Processing: "${userQuery}"\n`);
 
@@ -891,6 +1056,11 @@ Rules:
         itinerary: undefined,
         response: undefined,
         error: undefined,
+        categories: undefined,
+        mutations: [],
+        activeTripId,
+        timelineVersion,
+        mutationId,
       };
 
       // Run the graph
@@ -901,6 +1071,7 @@ Rules:
           result.response ||
           "I apologize, but I had trouble processing your request.",
         itinerary: result.itinerary,
+        mutations: result.mutations,
         error: result.error,
       };
     } catch (error) {
@@ -962,7 +1133,7 @@ Rules:
           }
         );
 
-        if (cityItinerary && cityItinerary.days) {
+        if (cityItinerary && cityItinerary.days && cityItinerary.days.some((d: any) => d.timeSlots?.length > 0)) {
           // Add city-specific days to all days
           cityItinerary.days.forEach((day: any) => {
             day.dayNumber = currentDayNumber++;
@@ -972,16 +1143,40 @@ Rules:
 
           console.log(`✅ Generated ${cityItinerary.days.length} days for ${city.name}`);
         } else {
-          console.error(`❌ Failed to generate itinerary for ${city.name}`);
+          console.warn(`⚠️ Enhanced builder failed for ${city.name}. Falling back to old generation pipeline.`);
+          try {
+             const fallbackItin = await this.generateItineraryWithContext_OLD({
+                 ...tripContext,
+                 cities: [city]
+             });
+             if (fallbackItin && fallbackItin.itinerary && fallbackItin.itinerary.days) {
+                 fallbackItin.itinerary.days.forEach((day: any) => {
+                     day.dayNumber = currentDayNumber++;
+                     day.city = city.name;
+                     allDays.push(day);
+                 });
+                 console.log(`✅ Fallback generated ${fallbackItin.itinerary.days.length} days for ${city.name}`);
+             }
+          } catch (fallbackError) {
+             console.error(`❌ Fallback also failed for ${city.name}:`, fallbackError);
+          }
         }
       }
 
       if (allDays.length === 0) {
-        return {
-          response: null,
-          itinerary: null,
-          error: 'Failed to generate itinerary for any city'
-        };
+        console.warn('⚠️ All generation pipelines failed. Generating a generic empty template to prevent crash.');
+        // Prevent fatal failure by creating at least one basic day per city
+        tripContext.cities.forEach((city: any) => {
+           for (let i=0; i<city.days; i++) {
+              allDays.push({
+                 dayNumber: currentDayNumber++,
+                 city: city.name,
+                 title: `Explore ${city.name}`,
+                 timeSlots: [],
+                 localTip: `Take your time to discover ${city.name}`
+              });
+           }
+        });
       }
 
       // Create complete itinerary

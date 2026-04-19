@@ -22,6 +22,7 @@ export const IntentSchema = z.object({
     'get_weather',
     'convert_currency',
     'estimate_budget',
+    'edit_timeline',
     'casual_chat',
     'unknown'
   ]).describe('The primary intent of the user query'),
@@ -137,6 +138,7 @@ Available Tools:
 - convert_currency: Convert between currencies
 - estimate_budget: Estimate trip costs
 - plan_trip: Create a full itinerary
+- edit_timeline: Modify an existing itinerary timeline (e.g., "Move Hemis Monastery to tomorrow morning", "Make Day 2 less hectic", "Undo my last change", "Swap Day 1 and Day 2", "Delete lunch")
 
 Intent Categories:
 - search_destination: User wants to explore a destination
@@ -153,6 +155,7 @@ Intent Categories:
 - get_weather: Weather information
 - convert_currency: Currency conversion
 - estimate_budget: Budget planning
+- edit_timeline: Modify an existing itinerary timeline
 - casual_chat: Just chatting, no specific intent
 - unknown: Cannot determine intent
 
@@ -202,7 +205,16 @@ Respond with ONLY a valid JSON object matching this schema:
     const detectedCategories = getCategoriesFromQuery(userQuery, travelType);
 
     // Simple keyword matching
-    if (query.includes('hotel') || query.includes('accommodation') || query.includes('stay')) {
+    if (
+      query.includes('move') || query.includes('swap') || query.includes('delete') || 
+      query.includes('remove') || query.includes('add') || query.includes('undo') || 
+      query.includes('redo') || query.includes('rename') || query.includes('replace') ||
+      query.includes('less hectic') || query.includes('optimise') || query.includes('balance') ||
+      query.includes('shift') || query.includes('reschedule') || query.includes('change time')
+    ) {
+      intent = 'edit_timeline';
+      tools = ['edit_timeline'];
+    } else if (query.includes('hotel') || query.includes('accommodation') || query.includes('stay')) {
       intent = 'search_hotels';
       tools = ['search_hotels'];
     } else if (query.includes('flight') || query.includes('fly')) {
