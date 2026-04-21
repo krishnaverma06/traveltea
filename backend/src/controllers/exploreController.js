@@ -1,7 +1,7 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import SavedTrip from "../models/SavedTrip.js";
 import { getOpenTripMapAPI } from "../mcp-servers/places/api.js";
 import { ingestSearchKnowledge } from "../vector/services/search-knowledge.service.js";
+import { createChatModel } from "../config/llm.js";
 
 const DEFAULT_QUERY = "Paris";
 
@@ -77,12 +77,7 @@ export const getRecommendations = async (req, res) => {
     ];
     const tags = [...new Set(trips.flatMap((t) => t.tags || []))];
 
-    const model = new ChatGoogleGenerativeAI({
-      model: process.env.GEMINI_MODEL || "gemini-1.5-flash",
-      temperature: 0.7,
-      maxOutputTokens: 300,
-      apiKey: process.env.GEMINI_API_KEY,
-    });
+    const model = createChatModel({ temperature: 0.7, maxOutputTokens: 300 });
 
     const systemPrompt = `You are a travel recommendation engine. Given a traveler's previously visited cities and travel style tags, suggest destinations they have NOT visited yet that match their taste. Respond with ONLY a valid JSON array of city or destination names (strings), at most 6 items, no explanations.`;
     const userPrompt = `Visited cities: ${visitedCities.join(", ") || "none"}\nTravel style tags: ${tags.join(", ") || "none"}`;

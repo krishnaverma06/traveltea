@@ -11,6 +11,7 @@ import { itineraryBuilder } from "../services/itineraryBuilder.js";
 import { intentDetector } from "./intent-detector.js";
 import { toolRegistry } from "./tool-registry.js";
 import { TRAVEL_AGENT_SYSTEM_PROMPT } from "./prompts.js";
+import { createChatModel } from "../config/llm.js";
 import type { AgentConfig } from "./types.js";
 import type { Destination } from "../mcp-servers/places/types.js";
 import type { Itinerary } from "../types/itinerary.js";
@@ -118,12 +119,11 @@ export class TravelAgent {
 
   constructor(config: AgentConfig = {}) {
     // Initialize Gemini model
-    this.model = new ChatGoogleGenerativeAI({
-      model: config.modelName || process.env.GEMINI_MODEL || "gemini-3.1-flash-lite",
+    this.model = createChatModel({
+      modelName: config.modelName,
       temperature: config.temperature || 0.7,
       maxOutputTokens: config.maxTokens || 4096,
       streaming: config.streaming || false,
-      apiKey: process.env.GEMINI_API_KEY,
     });
 
     // Build the LangGraph workflow
