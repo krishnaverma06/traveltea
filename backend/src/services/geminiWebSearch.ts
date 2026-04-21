@@ -1,6 +1,6 @@
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { getJson } from 'serpapi';
 import { z } from 'zod';
+import { createStructuredChatModel } from '../config/llm.js';
 
 const AttractionSchema = z.object({
     name: z.string().describe('Name of the attraction'),
@@ -30,12 +30,9 @@ export class GeminiWebSearchService {
 
     private get structuredModel() {
         if (!this._structuredModel) {
-            const baseModel = new ChatGoogleGenerativeAI({
-                model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+            this._structuredModel = createStructuredChatModel(DestinationSearchResultSchema, {
                 temperature: 0.3,
-                apiKey: process.env.GEMINI_API_KEY
             });
-            this._structuredModel = baseModel.withStructuredOutput(DestinationSearchResultSchema);
         }
         return this._structuredModel;
     }

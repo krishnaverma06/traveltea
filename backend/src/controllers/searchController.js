@@ -1,6 +1,6 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import SavedTrip from "../models/SavedTrip.js";
 import { getOpenTripMapAPI } from "../mcp-servers/places/api.js";
+import { createChatModel } from "../config/llm.js";
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -21,12 +21,7 @@ const buildDestinationCandidates = (destinations) =>
   }));
 
 const rankWithGemini = async (query, candidates) => {
-  const model = new ChatGoogleGenerativeAI({
-    model: process.env.GEMINI_MODEL || "gemini-1.5-flash",
-    temperature: 0,
-    maxOutputTokens: 500,
-    apiKey: process.env.GEMINI_API_KEY,
-  });
+  const model = createChatModel({ temperature: 0, maxOutputTokens: 500 });
 
   const systemPrompt = `You are a search relevance ranker for a travel app. Given a user's search text and a list of candidate results (each with type "trip" or "destination", an id, a title, and a subtitle), pick and order the candidates most relevant to the query by meaning, not just exact text match (e.g. "beach" should match a coastal city). Only return items from the given candidate list — never invent new ones. Respond with ONLY a valid JSON array of objects like [{"type": "trip", "id": "..."}], ordered most relevant first, at most 6 items.`;
 

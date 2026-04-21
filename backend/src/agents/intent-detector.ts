@@ -1,5 +1,6 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { getCategoriesFromQuery } from '../config/opentripmap-categories.js'; 
+import { getCategoriesFromQuery } from '../config/opentripmap-categories.js';
+import { createChatModel } from "../config/llm.js";
 import type { AgentConfig } from "./types.js";
 import { z } from 'zod';
 
@@ -61,12 +62,11 @@ export class IntentDetector {
   private model: ChatGoogleGenerativeAI;
 
   constructor(config: AgentConfig = {}) {
-    this.model = new ChatGoogleGenerativeAI({
-      model: config.modelName || process.env.GEMINI_MODEL || "gemini-3.1-flash-lite",
+    this.model = createChatModel({
+      modelName: config.modelName,
       temperature: config.temperature || 0.7,
       maxOutputTokens: config.maxTokens || 1000,
       streaming: config.streaming || false,
-      apiKey: process.env.GEMINI_API_KEY,
     });
   }
 
