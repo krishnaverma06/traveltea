@@ -24,6 +24,11 @@ export const IntentSchema = z.object({
     'convert_currency',
     'estimate_budget',
     'edit_timeline',
+    'search_events',
+    'list_saved_trips',
+    'get_upcoming_trip',
+    'get_travel_preferences',
+    'update_travel_preferences',
     'casual_chat',
     'unknown'
   ]).describe('The primary intent of the user query'),
@@ -138,7 +143,17 @@ Available Tools:
 - convert_currency: Convert between currencies
 - estimate_budget: Estimate trip costs
 - plan_trip: Create a full itinerary
+- search_events: Find concerts, sports, festivals and live events in a city
+- list_saved_trips: List the user's own saved trips
+- get_upcoming_trip: Find the user's next upcoming or in-progress saved trip
+- get_travel_preferences: Read the user's saved travel preferences
+- update_travel_preferences: Change the user's saved travel preferences (budget/travel style/interests)
 - edit_timeline: Modify an existing itinerary timeline (e.g., "Move Hemis Monastery to tomorrow morning", "Make Day 2 less hectic", "Undo my last change", "Swap Day 1 and Day 2", "Delete lunch")
+- search_events: Find concerts, sports, festivals and live events in a city (e.g., "what concerts are on in Lisbon in May")
+- list_saved_trips: List the user's own saved trips (e.g., "show my saved trips", "what trips have I saved")
+- get_upcoming_trip: Find the user's next upcoming or in-progress saved trip (e.g., "what's my next trip", "when am I travelling next")
+- get_travel_preferences: Read the user's saved travel preferences (e.g., "what are my travel preferences")
+- update_travel_preferences: Change the user's saved travel preferences — budget level, travel style, or interests (e.g., "set my budget to luxury", "add hiking to my interests"). This is about the user's account-level preferences, NOT about editing an itinerary — do not confuse with edit_timeline, which only modifies a specific trip's day-by-day plan.
 
 Intent Categories:
 - search_destination: User wants to explore a destination
@@ -155,7 +170,12 @@ Intent Categories:
 - get_weather: Weather information
 - convert_currency: Currency conversion
 - estimate_budget: Budget planning
-- edit_timeline: Modify an existing itinerary timeline
+- edit_timeline: Modify an existing itinerary's day-by-day plan (a specific trip's timeline)
+- search_events: Looking for concerts/sports/festivals/live events in a city
+- list_saved_trips: Wants to see their own saved trips
+- get_upcoming_trip: Wants to know their next/current trip
+- get_travel_preferences: Wants to see their saved account-level preferences
+- update_travel_preferences: Wants to change their saved account-level preferences (budget/travel style/interests) — NOT the same as edit_timeline
 - casual_chat: Just chatting, no specific intent
 - unknown: Cannot determine intent
 
@@ -195,18 +215,59 @@ Respond with ONLY a valid JSON object matching this schema:
   }
 
   /**
-   * Fallback intent detection using simple keyword matching
+   * Fallback intent detection using simple keyword matching.
+   * Public: called directly by the planner's native tool-calling path when
+   * the LLM call itself fails (quota/network), so it doesn't have to retry
+   * the same doomed call via detectIntent() first.
    */
-  private fallbackDetection(userQuery: string, travelType?: string): DetectedIntent {
+  fallbackDetection(userQuery: string, travelType?: string): DetectedIntent {
     const query = userQuery.toLowerCase();
     let intent: DetectedIntent['primary_intent'] = 'unknown';
     let tools: string[] = [];
 
     const detectedCategories = getCategoriesFromQuery(userQuery, travelType);
+    // Only populated by the update_travel_preferences branch below — the LLM
+    // path normally extracts these via IntentSchema.entities, but this is the
+    // keyword-fallback path, so preference *values* need their own parsing.
+    const preferenceEntities: { budget?: 'budget' | 'mid-range' | 'luxury'; category?: string; preferences?: string[] } = {};
 
     // Simple keyword matching
-    if (
-      query.includes('move') || query.includes('swap') || query.includes('delete') || 
+    // Account/saved-trip/event checks run first so they don't get shadowed by
+    // the broader edit_timeline ("add"/"change") or generic search/show checks below.
+    if (/(upcoming|next)\s+trip|when\s+am\s+i\s+(travel(l)?ing|going)/.test(query)) {
+      intent = 'get_upcoming_trip';
+      tools = ['get_upcoming_trip'];
+    } else if (
+      /(set|update|change)\s+my\s+(budget|travel\s*style|interests?)/.test(query) ||
+      /add\s+.+\s+to\s+my\s+interests/.test(query) ||
+      /remove\s+.+\s+(from|in)\s+my\s+interests/.test(query)
+    ) {
+      intent = 'update_travel_preferences';
+      tools = ['update_travel_preferences'];
+
+      const budgetValue = query.match(/\bto\s+(budget|mid-range|mid\s*range|luxury)\b/);
+      const styleValue = query.match(/\bto\s+(adventure|relaxation|cultural|business)\b/);
+      const interestValue = query.match(/add\s+(.+?)\s+to\s+my\s+interests/);
+      if (budgetValue) {
+        preferenceEntities.budget = budgetValue[1].replace(/\s+/g, '-') as 'budget' | 'mid-range' | 'luxury';
+      }
+      if (styleValue) {
+        preferenceEntities.category = styleValue[1];
+      }
+      if (interestValue) {
+        preferenceEntities.preferences = [interestValue[1].trim()];
+      }
+    } else if (/preferences|travel\s*style/.test(query)) {
+      intent = 'get_travel_preferences';
+      tools = ['get_travel_preferences'];
+    } else if (/\bsaved\s+trips?\b|\bmy\s+trips\b/.test(query)) {
+      intent = 'list_saved_trips';
+      tools = ['list_saved_trips'];
+    } else if (/\b(events?|concerts?|gigs?|festivals?)\b/.test(query)) {
+      intent = 'search_events';
+      tools = ['search_events'];
+    } else if (
+      query.includes('move') || query.includes('swap') || query.includes('delete') ||
       query.includes('remove') || query.includes('add') || query.includes('undo') || 
       query.includes('redo') || query.includes('rename') || query.includes('replace') ||
       query.includes('less hectic') || query.includes('optimise') || query.includes('balance') ||
@@ -248,6 +309,7 @@ Respond with ONLY a valid JSON object matching this schema:
       entities: {
         query_terms: userQuery.split(' ').filter(word => word.length > 3),
          opentripmap_kinds: detectedCategories,
+        ...preferenceEntities,
       },
       tools_to_call: tools,
       confidence: 0.6,  

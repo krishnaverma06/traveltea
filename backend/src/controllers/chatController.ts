@@ -22,17 +22,19 @@ export function setSocketIO(socketIO: SocketIOServer) {
  * Send a message and get AI response
  */
 export async function sendMessage(req: Request, res: Response) {
-  try {
-    const { message, conversationId, activeTripId, timelineVersion, mutationId } = req.body;
+  const { message, conversationId, activeTripId, timelineVersion, mutationId } = req.body;
+  // Computed outside the try block so it's available in the catch block too —
+  // previously the client got no conversationId back on error and the error
+  // socket event was keyed off req.body.conversationId (undefined for a
+  // brand-new conversation), so agent:error was never actually delivered.
+  const convId = conversationId || uuidv4();
 
+  try {
     // Validate input
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    // Generate or use existing conversation ID
-    const convId = conversationId || uuidv4();
-    
     // Find or create conversation, scoped to the requesting user
     let conversation = await Conversation.findOne({
       conversationId: convId,
@@ -66,15 +68,67 @@ export async function sendMessage(req: Request, res: Response) {
       });
     }
 
-    // Get AI response with timeout
+    // Get AI response with timeout. The agent call keeps its own .catch so
+    // that if the timeout wins the race and the agent call later rejects,
+    // it doesn't become an unhandled promise rejection (which crashes the
+    // whole process by default — there's no global handler for it).
+    let timeoutId: NodeJS.Timeout;
     const timeoutPromise = new Promise<any>((_, reject) => {
-      setTimeout(() => reject(new Error('Agent timeout after 30 seconds')), 30000);
+      timeoutId = setTimeout(() => reject(new Error('Agent timeout after 30 seconds')), 30000);
     });
-    
-    const agentResult  = await Promise.race([
-      travelAgent.chat(message, convId, req.userId, activeTripId, timelineVersion, mutationId),
-      timeoutPromise
-    ]);
+
+    const agentPromise = travelAgent.chat(message, convId, req.userId, activeTripId, timelineVersion, mutationId);
+    agentPromise.catch((err) => {
+      console.error('Agent call failed (possibly after the 30s timeout already won the race):', err);
+    });
+
+    const agentResult = await Promise.race([agentPromise, timeoutPromise]);
+    clearTimeout(timeoutId!);
+
+    // Handle Timeline Mutations BEFORE extracting the response string, so a
+    // mutation failure actually reaches the user instead of being silently
+    // discarded — the response text and conversation save below both need
+    // to reflect any mutation error.
+    let updatedTrip = null;
+    if (agentResult.mutations && agentResult.mutations.length > 0) {
+      try {
+        const { TimelineMutationEngine } = await import('../services/timelineMutationEngine.js');
+
+        // Use activeTripId explicitly. Never fallback to latest.
+        if (!activeTripId) {
+          throw new Error('No activeTripId provided for timeline mutation.');
+        }
+
+        const mutationResult = await TimelineMutationEngine.applyMutations(
+          activeTripId,
+          agentResult.mutations,
+          timelineVersion,
+          mutationId
+        );
+
+        updatedTrip = mutationResult.trip;
+
+        if (io) {
+          console.log('📡 [SOCKET] Emitting itinerary_updated for trip:', activeTripId);
+          io.emit('itinerary_updated', {
+            savedTripId: activeTripId,
+            tripData: updatedTrip,
+            mutations: agentResult.mutations,
+            mutationId
+          });
+        }
+      } catch (err: any) {
+        console.error("Failed to apply timeline mutations:", err);
+        // Overwrite agentResult.response with the validation error so it
+        // actually reaches aiResponse below, instead of the user being told
+        // nothing went wrong while their edit silently never happened.
+        if (err.name === 'MutationValidationError') {
+           agentResult.response = `I couldn't apply your changes: ${err.message}`;
+        } else {
+           agentResult.response = `I couldn't apply your changes: ${err.message || 'please try again.'}`;
+        }
+      }
+    }
 
      // Extract the response string from the agent result
     let aiResponse = agentResult.response || 'I apologize, but I had trouble processing your request.';
@@ -96,44 +150,6 @@ export async function sendMessage(req: Request, res: Response) {
     // Save AI message
     await conversation.save();
 
-    // Handle Timeline Mutations
-    let updatedTrip = null;
-    if (agentResult.mutations && agentResult.mutations.length > 0) {
-      try {
-        const { TimelineMutationEngine } = await import('../services/timelineMutationEngine.js');
-        
-        // Use activeTripId explicitly. Never fallback to latest.
-        if (!activeTripId) {
-          throw new Error('No activeTripId provided for timeline mutation.');
-        }
-
-        const mutationResult = await TimelineMutationEngine.applyMutations(
-          activeTripId, 
-          agentResult.mutations, 
-          timelineVersion, 
-          mutationId
-        );
-        
-        updatedTrip = mutationResult.trip;
-        
-        if (io) {
-          console.log('📡 [SOCKET] Emitting timeline_updated for trip:', activeTripId);
-          io.emit('timeline_updated', {
-            savedTripId: activeTripId,
-            tripData: updatedTrip,
-            mutations: agentResult.mutations,
-            mutationId
-          });
-        }
-      } catch (err: any) {
-        console.error("Failed to apply timeline mutations:", err);
-        // Overwrite aiResponse with validation error if needed
-        if (err.name === 'MutationValidationError') {
-           agentResult.response = `I couldn't apply your changes: ${err.message}`;
-        }
-      }
-    }
-
     // Emit completion only to sockets that joined this conversation's room
     console.log('📡 [SOCKET] Emitting agent:response for conversation:', convId);
     if (io) {
@@ -148,26 +164,31 @@ export async function sendMessage(req: Request, res: Response) {
       console.error('❌ [SOCKET] Socket.io instance not available!');
     }
 
-    // Return response
+    // Return response — itinerary/updatedTrip included here too (not just
+    // over the socket) so a REST-only client, or one that hasn't joined the
+    // conversation's socket room yet, still receives them.
     return res.status(200).json({
       conversationId: convId,
       message: aiResponse,
+      itinerary: agentResult.itinerary,
+      updatedTrip,
       timestamp: new Date(),
     });
 
   } catch (error) {
     console.error('Chat error:', error);
-    
+
     // Emit error only to sockets that joined this conversation's room
-    if (io && req.body.conversationId) {
-      io.to(req.body.conversationId).emit('agent:error', {
+    if (io) {
+      io.to(convId).emit('agent:error', {
         error: 'Failed to process your message',
-        conversationId: req.body.conversationId
+        conversationId: convId
       });
     }
 
-    return res.status(500).json({ 
-      error: 'Failed to process your message. Please try again.' 
+    return res.status(500).json({
+      error: 'Failed to process your message. Please try again.',
+      conversationId: convId,
     });
   }
 }

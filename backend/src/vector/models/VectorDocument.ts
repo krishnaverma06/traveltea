@@ -125,7 +125,7 @@ const VectorDocumentSchema = new Schema<IVectorDocumentModel>(
       type: [Number],
       select: false, // Exclude from default queries (large array)
       validate: {
-        validator: (v: number[]) => v.length === 0 || v.length === EMBEDDING_DIMENSIONS,
+        validator: (v: number[]) => v.length === EMBEDDING_DIMENSIONS,
         message: `Embedding must be exactly ${EMBEDDING_DIMENSIONS} dimensions`,
       },
     },
@@ -257,9 +257,12 @@ const VectorDocumentSchema = new Schema<IVectorDocumentModel>(
 // ─── Indexes ───────────────────────────────────────────────────────────────────
 
 // Compound unique index to prevent duplicate documents
-// Includes sourceType so the same destination can exist in global, search, and trip layers
+// Includes sourceType so the same destination can exist in global, search, and trip layers.
+// Includes userId so two different users' (or two trips') same-named documents don't
+// collide — global/search-knowledge docs share userId: null, which still partitions
+// correctly since Mongo treats null as a real value for uniqueness purposes here.
 VectorDocumentSchema.index(
-  { title: 1, category: 1, country: 1, city: 1, sourceType: 1 },
+  { title: 1, category: 1, country: 1, city: 1, sourceType: 1, userId: 1 },
   { unique: true }
 );
 

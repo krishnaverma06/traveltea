@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -34,6 +35,21 @@ export default function Navbar() {
         <div className="flex items-center gap-3">
           {isAuthenticated ? (
             <>
+              {/* Always-visible way back to the planning flow — e.g. right
+                  after an itinerary finishes generating, so the user isn't
+                  stuck relying on the (desktop-only) "Plan" link above. */}
+              <Button
+                variant="outline"
+                asChild
+                title="Back to planning"
+                aria-label="Back to planning"
+                className="text-black"
+              >
+                <Link to="/plan" className="flex items-center gap-2">
+                  <Home className="w-4 h-4" />
+                  <span className="hidden sm:inline">Plan a Trip</span>
+                </Link>
+              </Button>
               <span className="text-sm text-gray-600 hidden sm:block">
                 Welcome, {user?.name}
               </span>

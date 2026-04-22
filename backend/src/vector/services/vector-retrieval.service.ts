@@ -35,10 +35,27 @@ export class VectorRetrievalService {
   ): Promise<any[]> {
     if (limit <= 0) return [];
 
-    const filter: any = { sourceType };
+    const filter: any = {
+      sourceType,
+      archived: { $ne: true },
+      $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
+    };
+
+    const isUserScopedLayer =
+      sourceType === KnowledgeSourceType.USER_TRIPS || sourceType === KnowledgeSourceType.USER_PROFILE;
+
     if (userId) {
-      filter.userId = new mongoose.Types.ObjectId(userId);
-    } else if (sourceType === KnowledgeSourceType.USER_TRIPS || sourceType === KnowledgeSourceType.USER_PROFILE) {
+      // A malformed userId must not throw here — this used to happen outside
+      // any try/catch, which killed all 4 knowledge layers via the shared
+      // Promise.all in retrieveRelevantKnowledge, including the 2 layers
+      // (global/search) that don't even use userId.
+      if (mongoose.Types.ObjectId.isValid(userId)) {
+        filter.userId = new mongoose.Types.ObjectId(userId);
+      } else if (isUserScopedLayer) {
+        logger.error(`Invalid userId "${userId}" for user-scoped layer ${sourceType}`);
+        return [];
+      }
+    } else if (isUserScopedLayer) {
       // Cannot search user-specific layers without a user ID
       return [];
     }

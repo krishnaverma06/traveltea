@@ -31,6 +31,15 @@ export class WeatherService {
     const dailyMap = new Map<string, any>();
 
     for (const item of list) {
+      // Skip malformed items instead of throwing — a shape issue here isn't
+      // a retryable network error, but an unguarded throw used to make
+      // fetchWithRetry treat it as one, retrying the same parse failure
+      // twice before finally giving up.
+      if (!item?.dt_txt || !item.main || !item.wind || !item.weather?.[0]) {
+        logger.warn('Skipping malformed OpenWeatherMap forecast item');
+        continue;
+      }
+
       // item.dt_txt is "YYYY-MM-DD HH:mm:ss"
       const date = item.dt_txt.split(' ')[0];
       if (!dailyMap.has(date)) {
@@ -49,7 +58,7 @@ export class WeatherService {
       dayData.temps.push(item.main.temp);
       dayData.humidities.push(item.main.humidity);
       dayData.windSpeeds.push(item.wind.speed);
-      dayData.pops.push(item.pop * 100); // 0 to 1 -> 0 to 100%
+      dayData.pops.push((item.pop || 0) * 100); // 0 to 1 -> 0 to 100%
       dayData.conditions.push(item.weather[0].main);
       dayData.icons.push(item.weather[0].icon);
     }

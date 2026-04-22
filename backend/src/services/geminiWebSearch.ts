@@ -30,8 +30,14 @@ export class GeminiWebSearchService {
 
     private get structuredModel() {
         if (!this._structuredModel) {
+            // A full ~20-attraction structured response (each with description,
+            // tags, duration, etc.) doesn't fit in createChatModel's 4096-token
+            // default — the model was truncating mid-JSON, which the structured
+            // output parser then failed to parse, silently discarding the whole
+            // (real, valid-so-far) response and falling back to generic content.
             this._structuredModel = createStructuredChatModel(DestinationSearchResultSchema, {
                 temperature: 0.3,
+                maxOutputTokens: 8192,
             });
         }
         return this._structuredModel;

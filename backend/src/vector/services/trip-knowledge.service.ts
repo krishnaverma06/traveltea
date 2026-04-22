@@ -160,53 +160,63 @@ export async function ingestTripKnowledge(tripDoc: any, userId: string): Promise
 
     let parentDocumentId: any = null;
 
-    // We process chunks sequentially to establish parent-child relationship
+    // We process chunks sequentially to establish parent-child relationship.
+    // Each chunk is its own try/catch: a unique-index collision (or any
+    // other single-chunk failure) shouldn't abort ingestion for the rest of
+    // the trip's chunks — that previously meant one bad chunk silently
+    // dropped a trip's knowledge entirely.
+    let ingestedCount = 0;
     for (const chunk of chunks) {
-      const contentHash = generateContentHash(chunk.content);
-      
-      const embedding = await generateDocumentEmbedding({
-        title: chunk.title,
-        category: chunk.category,
-        country: mainCountry,
-        city: mainCity,
-        tags,
-        content: chunk.content,
-        source: 'user_trip',
-      });
+      try {
+        const contentHash = generateContentHash(chunk.content);
 
-      const doc = await VectorDocument.create({
-        title: chunk.title,
-        category: chunk.category,
-        country: mainCountry,
-        city: mainCity,
-        tags,
-        content: chunk.content,
-        contentHash,
-        embedding,
-        source: 'user_trip',
-        sourceType: KnowledgeSourceType.USER_TRIPS,
-        userId: userId,
-        tripId: tripDoc._id.toString(),
-        privacy: tripDoc.isPublic ? 'public' : 'private',
-        version: 1,
-        chunkType: chunk.chunkType,
-        chunkIndex: chunk.chunkIndex,
-        totalChunks: chunks.length,
-        parentDocument: chunk.chunkType === ChunkType.SUMMARY ? null : parentDocumentId,
-        metadata: {
-          travelTypes: [tripDoc.travelType],
-          estimatedCost: inferBudgetTier(tripDoc.budget),
-          duration: `${tripDoc.totalDays} days`,
-        },
-      });
+        const embedding = await generateDocumentEmbedding({
+          title: chunk.title,
+          category: chunk.category,
+          country: mainCountry,
+          city: mainCity,
+          tags,
+          content: chunk.content,
+          source: 'user_trip',
+        });
 
-      // The summary chunk is always first and acts as the parent
-      if (chunk.chunkType === ChunkType.SUMMARY) {
-        parentDocumentId = doc._id;
+        const doc = await VectorDocument.create({
+          title: chunk.title,
+          category: chunk.category,
+          country: mainCountry,
+          city: mainCity,
+          tags,
+          content: chunk.content,
+          contentHash,
+          embedding,
+          source: 'user_trip',
+          sourceType: KnowledgeSourceType.USER_TRIPS,
+          userId: userId,
+          tripId: tripDoc._id.toString(),
+          privacy: tripDoc.isPublic ? 'public' : 'private',
+          version: 1,
+          chunkType: chunk.chunkType,
+          chunkIndex: chunk.chunkIndex,
+          totalChunks: chunks.length,
+          parentDocument: chunk.chunkType === ChunkType.SUMMARY ? null : parentDocumentId,
+          metadata: {
+            travelTypes: [tripDoc.travelType],
+            estimatedCost: inferBudgetTier(tripDoc.budget),
+            duration: `${tripDoc.totalDays} days`,
+          },
+        });
+
+        // The summary chunk is always first and acts as the parent
+        if (chunk.chunkType === ChunkType.SUMMARY) {
+          parentDocumentId = doc._id;
+        }
+        ingestedCount++;
+      } catch (chunkError: any) {
+        logger.error(`Trip knowledge chunk failed for trip ${tripDoc._id} (chunkType: ${chunk.chunkType}): ${chunkError.message}`);
       }
     }
 
-    logger.info(`Trip knowledge ingested for trip: "${tripDoc.title}" (${tripDoc._id}) — ${chunks.length} chunks.`);
+    logger.info(`Trip knowledge ingested for trip: "${tripDoc.title}" (${tripDoc._id}) — ${ingestedCount}/${chunks.length} chunks.`);
   } catch (error: any) {
     logger.error(`Trip knowledge ingestion failed for trip ${tripDoc._id}: ${error.message}`);
   }
@@ -242,59 +252,68 @@ export async function updateTripKnowledge(tripId: string, tripDoc: any): Promise
 
     let parentDocumentId: any = null;
 
-    // Insert new chunks, reusing embeddings where possible
+    // Insert new chunks, reusing embeddings where possible. Each chunk gets
+    // its own try/catch — the old chunks are already deleted by this point,
+    // so a collision on one chunk must not prevent the rest from being
+    // written (that would be a net loss versus before the update).
+    let updatedCount = 0;
     for (const chunk of newChunks) {
-      const contentHash = generateContentHash(chunk.content);
-      
-      // Look for an existing chunk with the same hash
-      const existingMatch = existingChunks.find(c => c.contentHash === contentHash);
-      
-      let embedding = existingMatch?.embedding;
-      if (!embedding) {
-        logger.debug(`Chunk content changed for ${tripId} (type: ${chunk.chunkType}), generating embedding...`);
-        embedding = await generateDocumentEmbedding({
+      try {
+        const contentHash = generateContentHash(chunk.content);
+
+        // Look for an existing chunk with the same hash
+        const existingMatch = existingChunks.find(c => c.contentHash === contentHash);
+
+        let embedding = existingMatch?.embedding;
+        if (!embedding) {
+          logger.debug(`Chunk content changed for ${tripId} (type: ${chunk.chunkType}), generating embedding...`);
+          embedding = await generateDocumentEmbedding({
+            title: chunk.title,
+            category: chunk.category,
+            country: mainCountry,
+            city: mainCity,
+            tags,
+            content: chunk.content,
+            source: 'user_trip',
+          });
+        }
+
+        const doc = await VectorDocument.create({
           title: chunk.title,
           category: chunk.category,
           country: mainCountry,
           city: mainCity,
           tags,
           content: chunk.content,
+          contentHash,
+          embedding,
           source: 'user_trip',
+          sourceType: KnowledgeSourceType.USER_TRIPS,
+          userId: userId,
+          tripId: tripId,
+          privacy: tripDoc.isPublic ? 'public' : 'private',
+          version: (existingChunks[0].version || 1) + 1,
+          chunkType: chunk.chunkType,
+          chunkIndex: chunk.chunkIndex,
+          totalChunks: newChunks.length,
+          parentDocument: chunk.chunkType === ChunkType.SUMMARY ? null : parentDocumentId,
+          metadata: {
+            travelTypes: [tripDoc.travelType],
+            estimatedCost: inferBudgetTier(tripDoc.budget),
+            duration: `${tripDoc.totalDays} days`,
+          },
         });
-      }
 
-      const doc = await VectorDocument.create({
-        title: chunk.title,
-        category: chunk.category,
-        country: mainCountry,
-        city: mainCity,
-        tags,
-        content: chunk.content,
-        contentHash,
-        embedding,
-        source: 'user_trip',
-        sourceType: KnowledgeSourceType.USER_TRIPS,
-        userId: userId,
-        tripId: tripId,
-        privacy: tripDoc.isPublic ? 'public' : 'private',
-        version: (existingChunks[0].version || 1) + 1,
-        chunkType: chunk.chunkType,
-        chunkIndex: chunk.chunkIndex,
-        totalChunks: newChunks.length,
-        parentDocument: chunk.chunkType === ChunkType.SUMMARY ? null : parentDocumentId,
-        metadata: {
-          travelTypes: [tripDoc.travelType],
-          estimatedCost: inferBudgetTier(tripDoc.budget),
-          duration: `${tripDoc.totalDays} days`,
-        },
-      });
-
-      if (chunk.chunkType === ChunkType.SUMMARY) {
-        parentDocumentId = doc._id;
+        if (chunk.chunkType === ChunkType.SUMMARY) {
+          parentDocumentId = doc._id;
+        }
+        updatedCount++;
+      } catch (chunkError: any) {
+        logger.error(`Trip knowledge chunk update failed for trip ${tripId} (chunkType: ${chunk.chunkType}): ${chunkError.message}`);
       }
     }
 
-    logger.info(`Trip knowledge updated for trip: "${tripDoc.title}" (${tripId}) — ${newChunks.length} chunks.`);
+    logger.info(`Trip knowledge updated for trip: "${tripDoc.title}" (${tripId}) — ${updatedCount}/${newChunks.length} chunks.`);
   } catch (error: any) {
     logger.error(`Trip knowledge update failed for trip ${tripId}: ${error.message}`);
   }

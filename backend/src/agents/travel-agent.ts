@@ -6,11 +6,12 @@ import {
   SystemMessage,
   BaseMessage,
 } from "@langchain/core/messages";
+import { z } from "zod";
 import { openTripMapAPI } from "../mcp-servers/places/api.js";
 import { itineraryBuilder } from "../services/itineraryBuilder.js";
 import { intentDetector } from "./intent-detector.js";
-import { toolRegistry } from "./tool-registry.js";
-import { TRAVEL_AGENT_SYSTEM_PROMPT } from "./prompts.js";
+import { toolRegistry, type Tool } from "./tool-registry.js";
+import { TRAVEL_AGENT_SYSTEM_PROMPT, TOOL_SELECTION_SYSTEM_PROMPT } from "./prompts.js";
 import { createChatModel } from "../config/llm.js";
 import type { AgentConfig } from "./types.js";
 import type { Destination } from "../mcp-servers/places/types.js";
@@ -18,7 +19,7 @@ import type { Itinerary } from "../types/itinerary.js";
 import type { DetectedIntent } from "./intent-detector.js";
 import {
   formatCategoriesForAPI,
-  getCategoryDisplayName,
+  getCategoriesFromQuery,
 } from "../config/opentripmap-categories.js";
 
 // RAG Imports
@@ -57,7 +58,15 @@ const AgentStateAnnotation = Annotation.Root({
     reducer: (left, right) => right ?? left,
     default: () => undefined,
   }),
-  categories: Annotation<string[] | undefined>({
+  toolCalls: Annotation<Array<{ name: string; args: any; id?: string }> | undefined>({
+    reducer: (left, right) => right ?? left,
+    default: () => undefined,
+  }),
+  userId: Annotation<string | undefined>({
+    reducer: (left, right) => right ?? left,
+    default: () => undefined,
+  }),
+  toolData: Annotation<{ kind: string; data: any } | undefined>({
     reducer: (left, right) => right ?? left,
     default: () => undefined,
   }),
@@ -106,6 +115,46 @@ const AgentStateAnnotation = Annotation.Root({
 type AgentState = typeof AgentStateAnnotation.State;
 
 /**
+ * Maps a tool name (as returned in Gemini's native tool_calls) to where its
+ * result should land in AgentState and how response_formatter should read
+ * it — this table is the dispatch replacement for the old hardcoded switch.
+ */
+type ToolResultMapping =
+  | { slot: "searchResults"; extract: (payload: any) => any[] }
+  | { slot: "nearbyAttractions"; extract: (payload: any) => any[] }
+  | { slot: "placeDetails"; extract: (payload: any) => any; intentLabel?: string }
+  | { slot: "toolData"; kind: string }
+  | { slot: "itinerary" };
+
+const TOOL_RESULT_MAP: Record<string, ToolResultMapping> = {
+  search_destinations: { slot: "searchResults", extract: (p) => p?.destinations || [] },
+  search_by_category: { slot: "searchResults", extract: (p) => p?.places || [] },
+  search_restaurants: { slot: "searchResults", extract: (p) => p?.restaurants || [] },
+  get_nearby_attractions: { slot: "nearbyAttractions", extract: (p) => p?.attractions || [] },
+  get_place_details: { slot: "placeDetails", extract: (p) => p },
+  calculate_distance: { slot: "placeDetails", extract: (p) => p, intentLabel: "calculate_distance" },
+  web_search: { slot: "placeDetails", extract: (p) => p, intentLabel: "web_search" },
+  get_directions: { slot: "toolData", kind: "directions" },
+  estimate_route: { slot: "toolData", kind: "route" },
+  search_travel_tips: { slot: "toolData", kind: "travel_tips" },
+  search_events: { slot: "toolData", kind: "events" },
+  list_saved_trips: { slot: "toolData", kind: "saved_trips" },
+  get_upcoming_trip: { slot: "toolData", kind: "upcoming_trip" },
+  get_travel_preferences: { slot: "toolData", kind: "preferences" },
+  update_travel_preferences: { slot: "toolData", kind: "preferences_updated" },
+  plan_trip: { slot: "itinerary" },
+};
+
+// User-scoped tools are never called without a signed-in user (see
+// toolExecutorNode) — these are the messages surfaced instead.
+const USER_SCOPED_SIGNIN_MESSAGES: Record<string, string> = {
+  list_saved_trips: "you'll need to be signed in for me to look at your saved trips.",
+  get_upcoming_trip: "you'll need to be signed in for me to check your upcoming trips.",
+  get_travel_preferences: "you'll need to be signed in for me to look at your travel preferences.",
+  update_travel_preferences: "you'll need to be signed in for me to update your travel preferences.",
+};
+
+/**
  * Travel Planning Agent using LangGraph
  *
  * Workflow:
@@ -115,6 +164,7 @@ type AgentState = typeof AgentStateAnnotation.State;
  */
 export class TravelAgent {
   private model: ChatGoogleGenerativeAI;
+  private toolCallingModel: ReturnType<ChatGoogleGenerativeAI["bindTools"]>;
   private graph: any; // LangGraph compiled graph
 
   constructor(config: AgentConfig = {}) {
@@ -126,8 +176,52 @@ export class TravelAgent {
       streaming: config.streaming || false,
     });
 
+    // Bind the real tool registry (+ two virtual actions that aren't
+    // registry tools) once at construction time, so Gemini's own structured
+    // tool_calls output drives dispatch instead of a hardcoded switch.
+    this.toolCallingModel = this.model.bindTools(this.buildToolSpecs());
+
     // Build the LangGraph workflow
     this.graph = this.buildGraph();
+  }
+
+  /**
+   * Build the tool specs bound to the LLM for native function-calling:
+   * every registered tool (with userId stripped from the schema for
+   * userScoped tools — the LLM must never see or fill in a userId) plus two
+   * virtual actions that aren't toolRegistry entries: plan_trip (builds an
+   * itinerary via itineraryBuilder) and edit_timeline (a marker only — the
+   * conditional edge routes it straight to timeline_editor before any tool
+   * executes).
+   */
+  private buildToolSpecs() {
+    const registrySpecs = toolRegistry.getAllTools().map((tool: Tool) => ({
+      name: tool.name,
+      description: tool.description,
+      schema: tool.userScoped
+        ? (tool.inputSchema as unknown as z.ZodObject<any>).omit({ userId: true })
+        : tool.inputSchema,
+    }));
+
+    const virtualSpecs = [
+      {
+        name: "plan_trip",
+        description:
+          "Create a brand-new multi-day itinerary for a destination. Use only when the user wants a full trip plan built from scratch, not for modifying an existing one.",
+        schema: z.object({
+          destination: z.string().min(1).describe("Destination city/place for the itinerary"),
+          duration: z.number().int().min(1).max(30).optional().describe("Trip length in days; omit if unspecified"),
+        }),
+      },
+      {
+        name: "edit_timeline",
+        description:
+          "Modify an existing itinerary/timeline the user already has open (move/delete/add/swap/rename/undo/redo). Not for building a new plan, not for account preferences.",
+        schema: z.object({}),
+      },
+    ];
+
+    return [...registrySpecs, ...virtualSpecs];
   }
 
   /**
@@ -142,35 +236,16 @@ export class TravelAgent {
       .addNode("response_formatter", this.responseFormatterNode.bind(this))
       .addEdge("__start__", "planner")
       .addConditionalEdges("planner", (state: AgentState) => {
-        if (state.intent === "edit_timeline") {
+        const calls = state.toolCalls || [];
+        // edit_timeline is a marker only — it never reaches tool_executor,
+        // it routes straight to the specialized timeline_editor node.
+        if (calls.some((c) => c.name === "edit_timeline")) {
           return "timeline_editor";
         }
-        
-        // Map new intent types to appropriate actions
-        const intentsThatNeedTools = [
-          "search_destination",
-          "search_attractions",
-          "search_hotels",
-          "search_flights",
-          "search_restaurants",
-          "plan_trip",
-          "get_details",
-          "find_nearby",
-          "calculate_distance",
-          "get_directions",
-          "web_search",
-          "estimate_budget",
-          // Legacy intents for backward compatibility
-          "SEARCH_DESTINATION",
-          "GET_DETAILS",
-          "FIND_NEARBY",
-          "PLAN_TRIP",
-        ];
-
-        if (intentsThatNeedTools.includes(state.intent || "")) {
+        if (calls.length > 0) {
           return "tool_executor";
         }
-        // Otherwise, go directly to response formatter for casual chat
+        // No tool selected → casual chat, straight to the formatter.
         return "response_formatter";
       })
       .addEdge("tool_executor", "response_formatter")
@@ -181,286 +256,145 @@ export class TravelAgent {
   }
 
   /**
-   * Planner Node: Analyzes user query and decides which tools to use
-   * Now uses LLM-based intent detection with category extraction
+   * Planner Node: Uses native Gemini tool-calling (bindTools) to decide
+   * whether the query needs a tool at all, and if so, which one(s) with
+   * what arguments — real structured output, not prompt+regex JSON.
+   * Falls back to keyword-based detection only if the call itself throws
+   * (quota/network), mirroring this codebase's existing degrade-don't-crash
+   * convention for every other LLM call site.
    */
   private async plannerNode(state: AgentState): Promise<Partial<AgentState>> {
     console.log("\n🧠 [PLANNER] Analyzing user query:", state.userQuery);
     try {
-      // Use LLM-based intent detector
-      const detectedIntent = await intentDetector.detectIntent(state.userQuery);
+      const response = await this.toolCallingModel.invoke([
+        new SystemMessage(TOOL_SELECTION_SYSTEM_PROMPT),
+        new HumanMessage(state.userQuery),
+      ]);
+
+      const toolCalls = (response.tool_calls || []).map((tc: any) => ({
+        name: tc.name,
+        args: tc.args ?? {},
+        id: tc.id,
+      }));
 
       console.log(
-        "🎯 [PLANNER] Detected intent:",
-        detectedIntent.primary_intent,
+        "🔧 [PLANNER] Tool calls:",
+        toolCalls.map((c) => `${c.name}(${JSON.stringify(c.args)})`),
       );
-      console.log("🔧 [PLANNER] Tools to call:", detectedIntent.tools_to_call);
-      console.log(
-        "🏷️  [PLANNER] Categories:",
-        detectedIntent.entities.opentripmap_kinds,
-      );
-      console.log("📊 [PLANNER] Confidence:", detectedIntent.confidence);
-      console.log("💭 [PLANNER] Reasoning:", detectedIntent.reasoning);
-
-      // Store the detected intent and entities for tool execution
-      const intentString = detectedIntent.primary_intent;
 
       return {
-        intent: intentString,
-        categories: detectedIntent.entities.opentripmap_kinds || [],
-        messages: [new AIMessage(`Understood: ${detectedIntent.reasoning}`)],
+        toolCalls,
+        messages: [
+          new AIMessage(
+            toolCalls.length > 0
+              ? `Calling: ${toolCalls.map((c) => c.name).join(", ")}`
+              : String(response.content || "Understood."),
+          ),
+        ],
       };
     } catch (error) {
-      console.error("Planner node error:", error);
-      return {
-        error: "Failed to analyze your request. Please try again.",
-      };
+      console.error("Planner node error (falling back to keyword detection):", error);
+      const detected = intentDetector.fallbackDetection(state.userQuery);
+      return { toolCalls: this.legacyFallbackToToolCalls(detected, state.userQuery) };
     }
   }
 
   /**
-   * Tool Executor Node: Calls appropriate MCP tools based on intent
-   * Now uses detected categories from intent detection
+   * Tool Executor Node: Generic dispatch over whatever tool_calls the
+   * planner selected — no more per-intent switch. Executes every call
+   * (nothing silently dropped), but only the first result's mapping
+   * populates the state slot response_formatter reads, matching the
+   * previous "one thing per turn" behavior.
    */
   private async toolExecutorNode(
     state: AgentState,
   ): Promise<Partial<AgentState>> {
-    console.log("\n🔧 [TOOL EXECUTOR] Running tools for intent:", state.intent);
+    const calls = state.toolCalls || [];
+    console.log(
+      "\n🔧 [TOOL EXECUTOR] Running tool calls:",
+      calls.map((c) => c.name),
+    );
+    if (calls.length === 0) return {};
+
     try {
-      const { intent, userQuery } = state;
+      const results: Array<{ name: string; payload: any; isError: boolean }> = [];
 
-      const detectedCategories = state.categories || [];
+      for (const call of calls) {
+        // plan_trip is a virtual action — not a toolRegistry entry.
+        if (call.name === "plan_trip") {
+          const destination = call.args.destination || this.extractDestination(state.userQuery);
+          const duration = call.args.duration ?? this.extractDuration(state.userQuery);
 
-      // Map intent to new naming convention if needed
-      const normalizedIntent =
-        intent?.toLowerCase().replace("_", "_") || "unknown";
-
-      switch (normalizedIntent) {
-        case "search_destination":
-        case "search_attractions":
-        case "search_hotels": {
-          // Extract destination and category from query
-          const destination = this.extractDestination(userQuery);
-
-          let categories =
-            detectedCategories.length > 0
-              ? detectedCategories
-              : [this.extractCategory(userQuery)].filter(Boolean);
-
-          if (normalizedIntent === "search_hotels") {
-            categories = ["accomodations"];
-          }
-
-          console.log(
-            `🔍 [TOOL] Searching for ${categories.join(", ") || "attractions"} in ${destination}`,
-          );
-
-          if (categories.length > 0) {
-            // Use the search_by_category tool with detected categories
-            const categoryKinds = formatCategoriesForAPI(categories);
-
-            const result = await toolRegistry.executeTool(
-              "search_by_category",
-              {
-                location: destination,
-                category: categoryKinds,
-                limit: 10,
-              },
-            );
-
-            const categoryResults = result.content?.[0]?.text
-              ? JSON.parse(result.content[0].text).places
-              : [];
-
-            console.log(
-              `✅ [TOOL] Got ${categoryResults.length} results for categories: ${categories.map(getCategoryDisplayName).join(", ")}`,
-            );
-            return { searchResults: categoryResults };
-          } else {
-            // Generic search
-            const result = await toolRegistry.executeTool(
-              "search_destinations",
-              {
-                query: destination,
-                limit: 10,
-              },
-            );
-
-            const searchResults = result.content?.[0]?.text
-              ? JSON.parse(result.content[0].text).destinations
-              : [];
-
-            console.log(`✅ [TOOL] Got ${searchResults.length} results`);
-            return { searchResults };
-          }
-        }
-
-        case "search_restaurants": {
-          const destination = this.extractDestination(userQuery);
-          console.log(`🍽️ [TOOL] Searching for restaurants in ${destination}`);
-
-          const result = await toolRegistry.executeTool("search_restaurants", {
-            location: destination,
-            limit: 10,
-          });
-
-          const restaurants = result.content?.[0]?.text
-            ? JSON.parse(result.content[0].text).restaurants
-            : [];
-
-          return { searchResults: restaurants };
-        }
-
-        case "find_nearby": {
-          // Use coordinates from context or defaults
-          const result = await toolRegistry.executeTool(
-            "get_nearby_attractions",
-            {
-              latitude: 48.8584,
-              longitude: 2.2945,
-              radius: 5000,
-              limit: 10,
-            },
-          );
-
-          const attractions = result.content?.[0]?.text
-            ? JSON.parse(result.content[0].text).attractions
-            : [];
-
-          return { nearbyAttractions: attractions };
-        }
-
-        case "calculate_distance": {
-          const query = userQuery.trim();
-
-          let origin = "";
-          let destination = "";
-
-          // Pattern: from X to Y
-          let match = query.match(/from\s+(.+?)\s+to\s+(.+)/i);
-
-          if (match) {
-            origin = match[1].trim();
-            destination = match[2].trim();
-          }
-
-          // Pattern: between X and Y
-          if (!origin) {
-            match = query.match(/between\s+(.+?)\s+and\s+(.+)/i);
-
-            if (match) {
-              origin = match[1].trim();
-              destination = match[2].trim();
-            }
-          }
-
-          // Pattern: how far is X from Y
-          if (!origin) {
-            match = query.match(/how\s+far\s+is\s+(.+?)\s+from\s+(.+)/i);
-
-            if (match) {
-              origin = match[1].trim();
-              destination = match[2].trim();
-            }
-          }
-
-          // Pattern: X to Y
-          if (!origin) {
-            match = query.match(/^(.+?)\s+to\s+(.+)$/i);
-
-            if (match) {
-              origin = match[1].trim();
-              destination = match[2].trim();
-            }
-          }
-
-          if (!origin || !destination) {
-            return {
-              error:
-                "I couldn't identify the origin and destination. Please try something like 'Distance from Paris to London'.",
-            };
-          }
-
-          console.log(
-            `📏 [TOOL] Calculating distance from "${origin}" to "${destination}"`,
-          );
-
-          const result = await toolRegistry.executeTool("calculate_distance", {
-            origin,
-            destination,
-          });
-
-          const distanceData = result.content?.[0]?.text
-            ? JSON.parse(result.content[0].text)
-            : null;
-
-          return {
-            placeDetails: distanceData,
-          };
-        }
-
-        case "web_search":
-        case "search_flights":
-        case "get_weather":
-        case "convert_currency":
-        case "estimate_budget": {
-          console.log(`🌐 [TOOL] Web search for: ${userQuery}`);
-
-          const result = await toolRegistry.executeTool("web_search", {
-            query: userQuery,
-            numResults: 5,
-          });
-
-          const searchData = result.content?.[0]?.text
-            ? JSON.parse(result.content[0].text)
-            : null;
-
-          return {
-            placeDetails: searchData,
-          };
-        }
-
-        case "get_details": {
-          if (state.searchResults && state.searchResults.length > 0) {
-            const placeId = state.searchResults[0].id;
-            console.log(`📄 Getting details for place: ${placeId}`);
-            const result = await toolRegistry.executeTool("get_place_details", {
-              placeId,
-            });
-
-            const details = result.content?.[0]?.text
-              ? JSON.parse(result.content[0].text)
-              : null;
-            return { placeDetails: details };
-          }
-          return { error: "No place found to get details for." };
-        }
-
-        case "plan_trip": {
-          // Extract trip parameters from query
-          const destination = this.extractDestination(userQuery);
-          const duration = this.extractDuration(userQuery);
-
-          console.log(
-            `🗓️ [TOOL] Building ${duration}-day itinerary for ${destination}`,
-          );
-
-          const itinerary = await itineraryBuilder.buildItinerary(
-            destination,
-            duration,
-          );
-
+          console.log(`🗓️ [TOOL] Building ${duration}-day itinerary for ${destination}`);
+          const itinerary = await itineraryBuilder.buildItinerary(destination, duration);
           if (itinerary) {
-            console.log(
-              `✅ [TOOL] Successfully built itinerary with ${itinerary.days.length} days`,
-            );
+            console.log(`✅ [TOOL] Successfully built itinerary with ${itinerary.days.length} days`);
           }
-
-          return { itinerary };
+          results.push({ name: "plan_trip", payload: { itinerary }, isError: !itinerary });
+          continue;
         }
 
+        const tool = toolRegistry.getTool(call.name);
+        if (!tool) {
+          results.push({ name: call.name, payload: { error: `Unknown tool ${call.name}` }, isError: true });
+          continue;
+        }
+
+        let args = call.args || {};
+
+        // Fail-closed userId handling: never trust the LLM for this, even
+        // though the bound schema already omits the field so Gemini can't
+        // fill it in either. If there's no authenticated user, the tool is
+        // never called at all.
+        if (tool.userScoped) {
+          if (!state.userId) {
+            results.push({
+              name: call.name,
+              payload: { error: USER_SCOPED_SIGNIN_MESSAGES[call.name] || "you'll need to be signed in for that." },
+              isError: true,
+            });
+            continue;
+          }
+          args = { ...args, userId: state.userId };
+        }
+
+        // Narrow safety net: search_by_category requires a category; fall
+        // back to keyword-derived ones if the LLM left it out.
+        if (call.name === "search_by_category" && !args.category) {
+          args = { ...args, category: formatCategoriesForAPI(getCategoriesFromQuery(state.userQuery)) };
+        }
+
+        try {
+          const result = await toolRegistry.executeTool(call.name, args);
+          const payload = result.content?.[0]?.text ? JSON.parse(result.content[0].text) : null;
+          results.push({ name: call.name, payload, isError: !!result.isError });
+        } catch (err) {
+          results.push({ name: call.name, payload: { error: String(err) }, isError: true });
+        }
+      }
+
+      const primary = results[0];
+      if (!primary) return {};
+
+      if (primary.isError) {
+        return { error: primary.payload?.error || "I couldn't complete that request." };
+      }
+
+      const mapping = TOOL_RESULT_MAP[primary.name];
+      if (!mapping) return {};
+
+      switch (mapping.slot) {
+        case "searchResults":
+          return { searchResults: mapping.extract(primary.payload), intent: primary.name };
+        case "nearbyAttractions":
+          return { nearbyAttractions: mapping.extract(primary.payload), intent: primary.name };
+        case "placeDetails":
+          return { placeDetails: mapping.extract(primary.payload), intent: mapping.intentLabel || primary.name };
+        case "toolData":
+          return { toolData: { kind: mapping.kind, data: primary.payload }, intent: primary.name };
+        case "itinerary":
+          return { itinerary: primary.payload.itinerary, intent: "plan_trip" };
         default:
-          console.log("ℹ️  [TOOL] No specific tools needed for this intent");
           return {};
       }
     } catch (error) {
@@ -469,6 +403,112 @@ export class TravelAgent {
         error: "Failed to fetch travel information. Please try again.",
       };
     }
+  }
+
+  /**
+   * Degraded-path dispatch: only reached when the native tool-calling call
+   * itself throws (quota/network). Rebuilds an equivalent toolCalls array
+   * from the keyword-based fallback intent so the rest of the pipeline
+   * (tool_executor / timeline_editor routing) doesn't need to know the
+   * difference. This is where the old regex-based extraction helpers now
+   * earn their keep — as a last-resort arg builder, not primary dispatch.
+   */
+  private legacyFallbackToToolCalls(
+    detected: DetectedIntent,
+    userQuery: string,
+  ): Array<{ name: string; args: any }> {
+    const destination = this.extractDestination(userQuery);
+    const category = this.extractCategory(userQuery);
+
+    switch (detected.primary_intent) {
+      case "search_hotels":
+        return [{ name: "search_by_category", args: { location: destination, category: "accomodations" } }];
+      case "search_attractions":
+      case "search_destination":
+      case "unknown":
+        return category
+          ? [{ name: "search_by_category", args: { location: destination, category } }]
+          : [{ name: "search_destinations", args: { query: destination } }];
+      case "search_restaurants":
+        return [{ name: "search_restaurants", args: { location: destination } }];
+      case "find_nearby":
+        // No hardcoded fallback coordinates — this fails cleanly instead of
+        // always answering about Paris.
+        return [{ name: "get_nearby_attractions", args: {} }];
+      case "calculate_distance":
+        return [{ name: "calculate_distance", args: this.parseOriginDestination(userQuery) }];
+      case "plan_trip":
+        return [{ name: "plan_trip", args: { destination, duration: this.extractDuration(userQuery) } }];
+      case "web_search":
+      case "search_flights":
+      case "get_weather":
+      case "convert_currency":
+      case "estimate_budget":
+        return [{ name: "web_search", args: { query: userQuery } }];
+      case "search_events":
+        return [{ name: "search_events", args: { city: detected.entities.location || destination } }];
+      case "list_saved_trips":
+        return [{ name: "list_saved_trips", args: {} }];
+      case "get_upcoming_trip":
+        return [{ name: "get_upcoming_trip", args: {} }];
+      case "get_travel_preferences":
+        return [{ name: "get_travel_preferences", args: {} }];
+      case "update_travel_preferences":
+        return [
+          {
+            name: "update_travel_preferences",
+            args: {
+              budget: detected.entities.budget,
+              travelStyle: detected.entities.category,
+              interests: detected.entities.preferences,
+            },
+          },
+        ];
+      case "edit_timeline":
+        return [{ name: "edit_timeline", args: {} }];
+      default:
+        return [];
+    }
+  }
+
+  /**
+   * Helper: parse "from X to Y" / "between X and Y" / "how far is X from Y"
+   * / "X to Y" out of a raw query. Only used by the degraded fallback path
+   * now — the native tool-calling path has Gemini extract origin/
+   * destination directly via calculate_distance's schema.
+   */
+  private parseOriginDestination(query: string): { origin: string; destination: string } {
+    const trimmed = query.trim();
+    let origin = "";
+    let destination = "";
+
+    let match = trimmed.match(/from\s+(.+?)\s+to\s+(.+)/i);
+    if (match) {
+      origin = match[1].trim();
+      destination = match[2].trim();
+    }
+    if (!origin) {
+      match = trimmed.match(/between\s+(.+?)\s+and\s+(.+)/i);
+      if (match) {
+        origin = match[1].trim();
+        destination = match[2].trim();
+      }
+    }
+    if (!origin) {
+      match = trimmed.match(/how\s+far\s+is\s+(.+?)\s+from\s+(.+)/i);
+      if (match) {
+        origin = match[1].trim();
+        destination = match[2].trim();
+      }
+    }
+    if (!origin) {
+      match = trimmed.match(/^(.+?)\s+to\s+(.+)$/i);
+      if (match) {
+        origin = match[1].trim();
+        destination = match[2].trim();
+      }
+    }
+    return { origin, destination };
   }
 
   private async timelineEditorNode(
@@ -598,6 +638,7 @@ User query: "${state.userQuery}"`;
         nearbyAttractions,
         placeDetails,
         itinerary,
+        toolData,
         error,
       } = state;
 
@@ -609,7 +650,9 @@ User query: "${state.userQuery}"`;
       // Format response based on what data we have
       let formattedResponse = "";
 
-      if (itinerary) {
+      if (toolData) {
+        formattedResponse = this.formatToolData(toolData);
+      } else if (itinerary) {
         formattedResponse = this.formatItinerary(itinerary);
       } else if (searchResults && searchResults.length > 0) {
         formattedResponse = this.formatSearchResults(searchResults);
@@ -957,6 +1000,123 @@ Rules:
   }
 
   /**
+   * Helper: Format results from the account/events tools (Phase 1)
+   */
+  private formatToolData(toolData: { kind: string; data: any }): string {
+    const { kind, data } = toolData;
+    switch (kind) {
+      case "saved_trips":
+        return this.formatSavedTripsList(data);
+      case "upcoming_trip":
+        return this.formatUpcomingTrip(data);
+      case "preferences":
+        return this.formatPreferences(data);
+      case "preferences_updated":
+        return this.formatPreferencesUpdated(data);
+      case "events":
+        return this.formatEvents(data);
+      case "directions":
+        return this.formatDirections(data);
+      case "route":
+        return this.formatRoute(data);
+      case "travel_tips":
+        return this.formatTravelTips(data);
+      default:
+        return "Here's what I found. ✨";
+    }
+  }
+
+  private formatSavedTripsList(data: any): string {
+    const trips = data?.trips || [];
+    if (trips.length === 0) {
+      return "You haven't saved any trips yet — want me to help plan one? ✈️";
+    }
+
+    let response = `## 🧳 Your Saved Trips\n\nYou have **${data.total}** saved trip${data.total === 1 ? "" : "s"}. Here are your most recent:\n\n`;
+    for (const trip of trips) {
+      const cities = (trip.cities || []).join(", ") || "Unknown destination";
+      response += `**${trip.title}** — ${cities} · ${trip.totalDays} day${trip.totalDays === 1 ? "" : "s"} · starting ${trip.startDate}\n`;
+    }
+    return response;
+  }
+
+  private formatUpcomingTrip(data: any): string {
+    if (!data?.hasUpcoming) {
+      return "You don't have any upcoming trips saved right now. Want to plan one? ✈️";
+    }
+
+    const { trip, status, daysUntilStart } = data;
+    const cities = (trip.cities || []).join(", ") || "your destination";
+
+    if (status === "in_progress") {
+      return `## 🧳 You're on your trip right now!\n\nYou're currently on **${trip.title}** (${cities}) — a ${trip.totalDays}-day trip.`;
+    }
+
+    return `## 🧳 Your Next Trip\n\nYour next trip is **${trip.title}** (${cities}), starting in ${daysUntilStart} day${daysUntilStart === 1 ? "" : "s"} on ${trip.startDate}.`;
+  }
+
+  private formatPreferences(data: any): string {
+    const prefs = data?.preferences || {};
+    const interests = (prefs.interests || []).length > 0 ? prefs.interests.join(", ") : "none set";
+    return `## ⚙️ Your Travel Preferences\n\n- **Budget**: ${prefs.budget || "not set"}\n- **Travel style**: ${prefs.travelStyle || "not set"}\n- **Interests**: ${interests}`;
+  }
+
+  private formatPreferencesUpdated(data: any): string {
+    const updated = data?.updated || [];
+    const prefs = data?.preferences || {};
+    const interests = (prefs.interests || []).length > 0 ? prefs.interests.join(", ") : "none set";
+    return `## ✅ Preferences Updated\n\nI've updated your **${updated.map((f: string) => f.replace("preferences.", "")).join(", ")}**.\n\nYour preferences are now:\n- **Budget**: ${prefs.budget || "not set"}\n- **Travel style**: ${prefs.travelStyle || "not set"}\n- **Interests**: ${interests}`;
+  }
+
+  /**
+   * Helper: Format routing/directions results (get_directions/estimate_route,
+   * newly reachable now that dispatch is generic instead of a fixed switch)
+   */
+  private formatDirections(data: any): string {
+    if (!data || data.error) {
+      return `❌ ${data?.error || "Couldn't get directions for that."}`;
+    }
+    return `## 🧭 Directions\n\n${data.summary}\n\n🚦 Mode: ${data.mode}\n⏱️ ${data.duration_formatted}`;
+  }
+
+  private formatRoute(data: any): string {
+    if (!data || data.error) {
+      return `❌ ${data?.error || "Couldn't estimate that route."}`;
+    }
+    let response = `## 🗺️ Multi-Stop Route\n\n**${data.number_of_stops}** stops · ${data.total_distance_km} km · ${data.total_duration_formatted}\n\n`;
+    (data.legs || []).forEach((leg: any, i: number) => {
+      response += `${i + 1}. ${leg.from} → ${leg.to} (${leg.distance_km} km)\n`;
+    });
+    return response;
+  }
+
+  private formatTravelTips(data: any): string {
+    const tips = data?.tips || [];
+    if (tips.length === 0) {
+      return `I couldn't find any travel tips for **${data?.destination}** right now.`;
+    }
+    let response = `## 💡 Travel Tips for ${data.destination}\n\n`;
+    tips.slice(0, 5).forEach((tip: any) => {
+      response += `- **${tip.title}** — ${tip.snippet}\n`;
+    });
+    return response;
+  }
+
+  private formatEvents(data: any): string {
+    const events = data?.events || [];
+    if (events.length === 0) {
+      return `I couldn't find any listed events in **${data?.city}** between ${data?.startDate} and ${data?.endDate}.`;
+    }
+
+    let response = `## 🎟️ Events in ${data.city}\n\n`;
+    for (const event of events.slice(0, 8)) {
+      const when = event.time ? `${event.startDate} at ${event.time}` : event.startDate;
+      response += `- **[${event.name}](${event.ticketUrl})** — ${when}, ${event.venue}\n`;
+    }
+    return response;
+  }
+
+  /**
    * Helper: Format itinerary into readable text
    */
   private formatItinerary(itinerary: Itinerary): string {
@@ -1056,7 +1216,9 @@ Rules:
         itinerary: undefined,
         response: undefined,
         error: undefined,
-        categories: undefined,
+        toolCalls: undefined,
+        toolData: undefined,
+        userId,
         mutations: [],
         activeTripId,
         timelineVersion,

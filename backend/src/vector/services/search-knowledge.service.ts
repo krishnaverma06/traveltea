@@ -15,6 +15,7 @@ import type { SearchKnowledgeInput } from '../types/vector.types.js';
 import { SEARCH_KNOWLEDGE_MIN_RESULTS } from '../types/vector.constants.js';
 import { generateContentHash } from '../utils/content.utils.js';
 import { generateDocumentEmbedding } from './vector-embedding.service.js';
+import { getOpenTripMapAPI } from '../../mcp-servers/places/api.js';
 import Logger from '../../utils/logger.js';
 
 const logger = new Logger('SearchKnowledge');
@@ -32,27 +33,29 @@ function computePopularityScore(searchCount: number, lastSearched: Date): number
 }
 
 /**
- * Extract a concise destination name from the search query and results.
+ * Resolve the destination name from the search query itself.
+ *
+ * `destinations` are individual points-of-interest from a radius search
+ * around the geocoded query (e.g. searching "Paris" returns things like
+ * "Eiffel Tower"), NOT the destination itself — using destinations[0].name
+ * here previously mislabeled every ingested document with a POI name that
+ * also varies between calls for the same city. The query the user actually
+ * typed is the reliable destination name.
  */
-function resolveDestinationName(query: string, destinations: any[]): string {
-  // Prefer the name from the first API result if available
-  if (destinations.length > 0 && destinations[0].name) {
-    return destinations[0].name;
-  }
-  // Fallback to capitalizing the query
+function resolveDestinationName(query: string): string {
   return query.charAt(0).toUpperCase() + query.slice(1);
 }
 
 /**
- * Extract country from destination results.
+ * Resolve the destination's country via OpenTripMap's geoname lookup for
+ * the search query (the same geocode step searchPlaces performs
+ * internally, exposed separately as getCityCountryCode). Destination
+ * results never carry a `country`/`address.country` field, so deriving it
+ * from them (as this used to) always fell through to 'Unknown'.
  */
-function resolveCountry(destinations: any[]): string {
-  for (const d of destinations) {
-    if (d.country) return d.country;
-    // OpenTripMap may have country code in various places
-    if (d.address?.country) return d.address.country;
-  }
-  return 'Unknown';
+async function resolveCountry(query: string): Promise<string> {
+  const code = await getOpenTripMapAPI().getCityCountryCode(query);
+  return code || 'Unknown';
 }
 
 // ─── Document Builder ──────────────────────────────────────────────────────────
@@ -127,14 +130,19 @@ export async function ingestSearchKnowledge(
       return;
     }
 
-    const destinationName = resolveDestinationName(query, destinations);
-    const country = resolveCountry(destinations);
+    const destinationName = resolveDestinationName(query);
+    const country = await resolveCountry(query);
     const city = destinationName; // For most searches, city = destination name
 
-    // Check if this destination already exists in search_knowledge
+    // Check if this destination already exists in search_knowledge — must
+    // match the exact key the upsert below writes with (title+category+
+    // country+city+sourceType), or a looser match can silently merge a new
+    // destination's ingest into an unrelated existing document.
     const existing = await VectorDocument.findOne({
       title: destinationName,
       category: VectorDocumentCategory.DESTINATION,
+      country,
+      city,
       sourceType: KnowledgeSourceType.SEARCH_KNOWLEDGE,
     });
 

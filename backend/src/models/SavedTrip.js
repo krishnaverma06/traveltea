@@ -114,6 +114,11 @@ const timelineSchema = new mongoose.Schema(
     restaurants: { type: mongoose.Schema.Types.Mixed }, 
     generatedAt: { type: Date, default: Date.now },
     lastUpdated: { type: Date, default: Date.now },
+    // Tracks the last applied undo/redo mutationId for idempotency — undo/redo
+    // don't push a `revisions` entry of their own (that array is the linear
+    // edit history undo/redo navigate through, not a log of every action),
+    // so a separate field is needed to detect a retried undo/redo.
+    lastMutationId: { type: String, default: null },
     providerStatus: {
       weather: { type: String, enum: ['success', 'unavailable'] },
       events: { type: String, enum: ['success', 'unavailable'] }

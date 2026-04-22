@@ -291,6 +291,43 @@ export const updateSavedTrip = async (req, res) => {
   }
 };
 
+// Mark a saved trip as upcoming by (re)confirming its start date — "upcoming
+// trips" are derived client-side by filtering saved trips with startDate in
+// the future, so this just needs to set a real startDate.
+export const markTripUpcoming = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tripStartDate } = req.body;
+
+    if (!tripStartDate) {
+      return res.status(400).json({ error: "tripStartDate is required" });
+    }
+
+    const savedTrip = await SavedTrip.findOneAndUpdate(
+      { _id: id, user: req.userId },
+      { startDate: tripStartDate },
+      { new: true, runValidators: true }
+    );
+
+    if (!savedTrip) {
+      return res.status(404).json({
+        error: "Saved trip not found",
+      });
+    }
+
+    res.json({
+      message: "Trip marked as upcoming",
+      savedTrip,
+    });
+  } catch (error) {
+    console.error("Error marking trip as upcoming:", error);
+    res.status(500).json({
+      error: "Failed to mark trip as upcoming",
+      details: error.message,
+    });
+  }
+};
+
 // Delete a saved trip
 export const deleteSavedTrip = async (req, res) => {
   try {

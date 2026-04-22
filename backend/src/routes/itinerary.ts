@@ -103,7 +103,8 @@ router.post('/refine', async (req, res) => {
     // For now, regenerate with the refinement as additional context
     const result = await agent.chat(
       `Based on this itinerary:\n${JSON.stringify(itinerary, null, 2)}\n\nPlease: ${refinementRequest}`,
-      undefined
+      undefined,
+      req.userId
     );
 
     res.json({

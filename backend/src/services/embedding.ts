@@ -19,13 +19,19 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 // M0 free tier — keep dimensions low for storage efficiency
 const OUTPUT_DIMENSIONS = 256;
 
+// Single source of truth for which embedding model is actually used —
+// vector/types/vector.constants.ts's DEFAULT_EMBEDDING_MODEL imports this
+// rather than hardcoding its own copy, so document provenance metadata
+// can't silently drift from the model that really generated it.
+const MODEL_NAME = 'gemini-embedding-2';
+
 let embeddingsInstance: GoogleGenerativeAIEmbeddings | null = null;
 
 function getEmbeddingsModel(): GoogleGenerativeAIEmbeddings {
   if (!embeddingsInstance) {
     embeddingsInstance = new GoogleGenerativeAIEmbeddings({
       apiKey: process.env.GEMINI_API_KEY,
-      modelName: 'gemini-embedding-2',
+      modelName: MODEL_NAME,
     });
   }
   return embeddingsInstance;
@@ -120,3 +126,4 @@ export function buildTripSummary(tripDoc: any): string {
 }
 
 export const EMBEDDING_DIMENSIONS = OUTPUT_DIMENSIONS;
+export const EMBEDDING_MODEL_NAME = MODEL_NAME;

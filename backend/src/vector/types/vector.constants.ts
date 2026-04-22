@@ -6,11 +6,12 @@
  */
 
 import { VectorDocumentCategory, KnowledgeSourceType } from './vector.types.js';
+import { EMBEDDING_MODEL_NAME } from '../../services/embedding.js';
 
 // ─── Embedding Metadata Defaults ───────────────────────────────────────────────
 
-/** Default model used for vector embeddings */
-export const DEFAULT_EMBEDDING_MODEL = 'models/text-embedding-004'; // Also maps to gemini-embedding-2
+/** Default model used for vector embeddings — sourced from services/embedding.ts so this can't drift from the model actually used to generate embeddings */
+export const DEFAULT_EMBEDDING_MODEL = EMBEDDING_MODEL_NAME;
 
 /** Version identifier for the embedding generation strategy */
 export const DEFAULT_EMBEDDING_VERSION = 'v1.0.0';
