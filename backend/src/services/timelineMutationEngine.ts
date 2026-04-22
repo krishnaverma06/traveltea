@@ -46,11 +46,17 @@ export class TimelineMutationEngine {
     }
 
     // Handle Undo / Redo directly if they are the sole operations
-    if (mutations.length === 1 && mutations[0].action === 'undo') {
-      return this.undo(trip, mutationId, aiSummary);
-    }
-    if (mutations.length === 1 && mutations[0].action === 'redo') {
-      return this.redo(trip, mutationId, aiSummary);
+    if (mutations.length === 1 && (mutations[0].action === 'undo' || mutations[0].action === 'redo')) {
+      // undo/redo don't append to `revisions` (see lastMutationId comment on
+      // the schema), so the idempotency check above can't catch a retried
+      // undo/redo — check the dedicated field instead.
+      if (mutationId && trip.timeline.lastMutationId === mutationId) {
+        logger.info(`[Idempotency] Duplicate undo/redo detected: ${mutationId}`);
+        return { status: 'duplicate', trip };
+      }
+      return mutations[0].action === 'undo'
+        ? this.undo(trip, mutationId, aiSummary)
+        : this.redo(trip, mutationId, aiSummary);
     }
 
     // Optimistic Locking Check
@@ -111,8 +117,9 @@ export class TimelineMutationEngine {
     trip.timeline.currentRevisionIndex -= 1;
     trip.timeline.version += 1;
     trip.timeline.lastUpdated = new Date();
+    if (mutationId) trip.timeline.lastMutationId = mutationId;
     await trip.save();
-    return { status: 'success', trip, aiSummary: 'Undid last change.' };
+    return { status: 'success', trip, aiSummary: aiSummary || 'Undid last change.' };
   }
 
   private static async redo(trip: any, mutationId?: string, aiSummary?: string) {
@@ -125,8 +132,9 @@ export class TimelineMutationEngine {
     trip.generatedItinerary = nextRev.after;
     trip.timeline.version += 1;
     trip.timeline.lastUpdated = new Date();
+    if (mutationId) trip.timeline.lastMutationId = mutationId;
     await trip.save();
-    return { status: 'success', trip, aiSummary: 'Redid last change.' };
+    return { status: 'success', trip, aiSummary: aiSummary || 'Redid last change.' };
   }
 
   private static validateMutation(trip: any, mutation: any) {
@@ -334,10 +342,11 @@ export class TimelineMutationEngine {
      if (loc) {
         // Find or create slot based on mutation.newTime (for now move to different period slot if possible)
         const [activity] = trip.generatedItinerary.days[loc.dayIndex].timeSlots[loc.slotIndex].activities.splice(loc.activityIndex, 1);
-        
-        let targetSlot = trip.generatedItinerary.days[loc.dayIndex].timeSlots.find((s: any) => 
-           s.period.toLowerCase().includes(mutation.newTime.toLowerCase()) || 
-           mutation.newTime.toLowerCase().includes(s.period.toLowerCase())
+        const newTime = mutation.newTime || '';
+
+        let targetSlot = trip.generatedItinerary.days[loc.dayIndex].timeSlots.find((s: any) =>
+           s.period.toLowerCase().includes(newTime.toLowerCase()) ||
+           newTime.toLowerCase().includes(s.period.toLowerCase())
         );
         
         if (!targetSlot) {

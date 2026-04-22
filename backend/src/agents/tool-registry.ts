@@ -1,6 +1,9 @@
+import type { z } from 'zod';
 import { placesTools } from '../mcp-servers/places/tools.js';
 import { transportTools } from '../mcp-servers/transport/tools.js';
 import { webSearchTools } from '../mcp-servers/websearch/tools.js';
+import { eventsTools } from '../mcp-servers/events/tools.js';
+import { accountTools } from './tools/account.js';
 
 /**
  * Tool Registry
@@ -10,8 +13,13 @@ import { webSearchTools } from '../mcp-servers/websearch/tools.js';
 export interface Tool {
   name: string;
   description: string;
-  inputSchema: any;
+  inputSchema: z.ZodTypeAny;
   execute: (args: any) => Promise<any>;
+  // If true, this tool requires a server-trusted userId. The planner never
+  // exposes `userId` in the schema it binds to the LLM, and the tool
+  // executor always overwrites `args.userId` from the authenticated
+  // request — this flag is what tells both of those to kick in.
+  userScoped?: boolean;
 }
 
 export class ToolRegistry {
@@ -37,6 +45,16 @@ export class ToolRegistry {
 
     // Register web search tools
     webSearchTools.forEach(tool => {
+      this.tools.set(tool.name, tool);
+    });
+
+    // Register events tools
+    eventsTools.forEach(tool => {
+      this.tools.set(tool.name, tool);
+    });
+
+    // Register account tools (saved trips, preferences)
+    accountTools.forEach(tool => {
       this.tools.set(tool.name, tool);
     });
 
@@ -69,13 +87,32 @@ export class ToolRegistry {
    */
   async executeTool(name: string, args: any): Promise<any> {
     const tool = this.tools.get(name);
-    
+
     if (!tool) {
       throw new Error(`Tool not found: ${name}`);
     }
 
+    // Enforcing as of Phase 2: args now only ever come from Gemini's
+    // structured tool_calls (schema-bound) or the fallback mapper (built
+    // against the same schemas), so a mismatch means something is actually
+    // wrong rather than pre-existing call-site drift. Use check.data (not
+    // raw args) so Zod .default()s apply centrally.
+    const check = tool.inputSchema?.safeParse?.(args);
+    if (check && !check.success) {
+      console.warn(`⚠️ [TOOL REGISTRY] Args for "${name}" failed schema validation:`, check.error.issues);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ error: `Invalid arguments for ${name}` }),
+          },
+        ],
+        isError: true,
+      };
+    }
+
     console.log(`🔧 [TOOL REGISTRY] Executing tool: ${name}`);
-    return await tool.execute(args);
+    return await tool.execute(check ? check.data : args);
   }
 
   /**
@@ -133,6 +170,11 @@ export class ToolRegistry {
       get_directions: ['get_directions'],
       web_search: ['web_search', 'search_travel_tips'],
       estimate_budget: ['web_search'],
+      search_events: ['search_events'],
+      list_saved_trips: ['list_saved_trips'],
+      get_upcoming_trip: ['get_upcoming_trip'],
+      get_travel_preferences: ['get_travel_preferences'],
+      update_travel_preferences: ['update_travel_preferences'],
       casual_chat: [],
       unknown: [],
     };

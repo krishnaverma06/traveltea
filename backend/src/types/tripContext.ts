@@ -96,25 +96,32 @@ export function calculateDailyBudget(budget: Budget, budgetMode: 'capped' | 'fle
   activities: number;
   transport: number;
 } {
-  const totalBudget = budget.total;
-  
+  // Guard against missing sub-fields (e.g. a caller that only sends `total`)
+  // producing NaN through the arithmetic below.
+  const totalBudget = budget.total ?? 0;
+  const accommodation = budget.accommodation ?? 0;
+  const food = budget.food ?? 0;
+  const events = budget.events ?? 0;
+  const travel = budget.travel ?? 0;
+  const safeDays = days > 0 ? days : 1;
+
   if (budgetMode === 'capped') {
     // Budget is in percentages
     return {
-      totalPerDay: totalBudget / days,
-      accommodation: (totalBudget * (budget.accommodation / 100)) / days,
-      food: (totalBudget * (budget.food / 100)) / days,
-      activities: (totalBudget * (budget.events / 100)) / days,
-      transport: (totalBudget * (budget.travel / 100)) / days,
+      totalPerDay: totalBudget / safeDays,
+      accommodation: (totalBudget * (accommodation / 100)) / safeDays,
+      food: (totalBudget * (food / 100)) / safeDays,
+      activities: (totalBudget * (events / 100)) / safeDays,
+      transport: (totalBudget * (travel / 100)) / safeDays,
     };
   } else {
     // Budget is in dollar amounts
     return {
-      totalPerDay: totalBudget / days,
-      accommodation: budget.accommodation / days,
-      food: budget.food / days,
-      activities: budget.events / days,
-      transport: budget.travel / days,
+      totalPerDay: totalBudget / safeDays,
+      accommodation: accommodation / safeDays,
+      food: food / safeDays,
+      activities: events / safeDays,
+      transport: travel / safeDays,
     };
   }
 }

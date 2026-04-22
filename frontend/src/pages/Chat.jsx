@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useSocket } from "../hooks/useSocket";
+import { useTrip } from "../contexts/TripContext";
 import { MessageBubble } from "../components/Chat/MessageBubble";
 import { TypingIndicator } from "../components/Chat/TypingIndicator";
 import { MessageInput } from "../components/Chat/MessageInput";
@@ -9,6 +10,10 @@ import axios from "axios";
 import { Plane, MapPin } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+// Backend's own agent timeout is 30s (chatController.ts) — give it a little
+// headroom before the client gives up waiting for a socket response that
+// may have been dropped in transit.
+const CLIENT_RESPONSE_TIMEOUT_MS = 35000;
 
 export default function Chat({ isDrawer = false }) {
   // Generate the conversation id up front so the socket joins this
@@ -18,6 +23,8 @@ export default function Chat({ isDrawer = false }) {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
+  const responseTimeoutRef = useRef(null);
+  const { tripData } = useTrip();
 
   // Itinerary and Map state
   const [currentItinerary, setCurrentItinerary] = useState(null);
@@ -67,6 +74,7 @@ export default function Chat({ isDrawer = false }) {
             },
           ]);
 
+          clearTimeout(responseTimeoutRef.current);
           setIsLoading(false);
         }
       } catch (e) {
@@ -102,6 +110,7 @@ export default function Chat({ isDrawer = false }) {
             },
           ]);
 
+          clearTimeout(responseTimeoutRef.current);
           setIsLoading(false);
         }
       } catch (e) {
@@ -156,6 +165,23 @@ export default function Chat({ isDrawer = false }) {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
+    // Client-side safety net: if neither agent:response nor agent:error
+    // ever arrives (dropped socket event, client never joined the room in
+    // time, connection hiccup), don't spin the loading indicator forever.
+    clearTimeout(responseTimeoutRef.current);
+    responseTimeoutRef.current = setTimeout(() => {
+      setIsLoading(false);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "That's taking longer than expected — the response may have been lost. Please try again.",
+          timestamp: new Date(),
+        },
+      ]);
+    }, CLIENT_RESPONSE_TIMEOUT_MS);
+
     try {
       const token = localStorage.getItem("traveltea_token");
 
@@ -168,6 +194,15 @@ export default function Chat({ isDrawer = false }) {
         {
           message,
           conversationId,
+          // Only meaningful when there's an active saved trip loaded — lets
+          // the agent apply timeline edits ("move X to day 2") via chat.
+          ...(tripData?.savedTripId
+            ? {
+                activeTripId: tripData.savedTripId,
+                timelineVersion: tripData.timeline?.version,
+                mutationId: crypto.randomUUID(),
+              }
+            : {}),
         },
         {
           headers: {
@@ -199,12 +234,12 @@ export default function Chat({ isDrawer = false }) {
         errorMessage = error.message;
       }
 
+      clearTimeout(responseTimeoutRef.current);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content:
-            "Sorry, I had trouble processing your message. Please try again.",
+          content: errorMessage,
           timestamp: new Date(),
         },
       ]);

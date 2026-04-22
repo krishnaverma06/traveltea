@@ -41,14 +41,26 @@ const ResultsPage = () => {
       tripData.cities.length > 0;
     const hasPrefs = tripData?.people && tripData?.travelType;
     const hasBudget =
-      tripData?.budget?.total &&
+      tripData?.budget?.total > 0 &&
       (tripData?.budget?.travel !== undefined) &&
       (tripData?.budget?.accommodation !== undefined) &&
       (tripData?.budget?.food !== undefined) &&
       (tripData?.budget?.events !== undefined);
 
     if (!hasCore || !hasPrefs || !hasBudget) {
-      console.log('Missing required trip data for itinerary generation');
+      // Previously this silently returned — isLoading/error/generatedItinerary
+      // all stayed at their initial (false/null/null) values, so none of the
+      // three render branches below ever matched and the page showed nothing
+      // beneath the header, with no indication of why. Surface it instead.
+      const missingStep = !hasCore
+        ? "destinations and dates"
+        : !hasPrefs
+          ? "travel preferences"
+          : "budget";
+      console.log(`Missing required trip data for itinerary generation: ${missingStep}`);
+      setError(
+        `We're missing your ${missingStep} — please go back and complete that step before generating an itinerary.`
+      );
       return;
     }
 

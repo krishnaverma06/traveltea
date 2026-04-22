@@ -29,12 +29,18 @@ export class EnhancedItineraryBuilder {
         console.log(`   Travel type: ${context.travelType}, Pacing: ${context.pacing}`);
 
         try {
-            // STEP 1: Use Gemini web search service to find top attractions
+            // STEP 1: Use Gemini web search service to find top attractions.
+            // Scaled to trip length instead of a flat 30 — a fully-detailed
+            // 30-attraction structured response doesn't reliably fit even an
+            // 8192-token completion (was truncating mid-JSON and silently
+            // discarding the whole response). ~5-6 candidates/day, filtered
+            // down afterward, is still plenty of headroom for a short trip.
+            const attractionsToRequest = Math.min(30, Math.max(12, days * 6));
             const webSearchResults = await geminiWebSearch.findTopAttractions(
                 city,
                 context.travelType,
                 context.preferences,
-                30 // Get 30 attractions to filter down
+                attractionsToRequest
             );
 
             if (!webSearchResults || !webSearchResults.attractions || webSearchResults.attractions.length === 0) {

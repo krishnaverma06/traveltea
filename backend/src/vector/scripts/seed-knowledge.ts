@@ -127,9 +127,19 @@ To enable vector search, create a Search Index in MongoDB Atlas:
     { "type": "filter", "path": "category" },
     { "type": "filter", "path": "country" },
     { "type": "filter", "path": "city" },
-    { "type": "filter", "path": "tags" }
+    { "type": "filter", "path": "tags" },
+    { "type": "filter", "path": "sourceType" },
+    { "type": "filter", "path": "userId" },
+    { "type": "filter", "path": "archived" },
+    { "type": "filter", "path": "expiresAt" }
   ]
 }
+
+IMPORTANT: every field referenced in vector-retrieval.service.ts's
+$vectorSearch pre-filter (sourceType, userId, archived, expiresAt) MUST be
+declared as a "filter" field here, or Atlas rejects the query — which this
+app silently downgrades to "0 results", indistinguishable from a legitimate
+empty result. Keep this list in sync with that file's filter object.
 
 Note: The index may take a few minutes to build after creation.
 `);

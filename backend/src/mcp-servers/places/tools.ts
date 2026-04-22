@@ -224,20 +224,9 @@ export const searchByCategoryTool = {
   description: 'Search for specific types of places like museums, parks, monuments, historical sites, etc.',
   inputSchema: z.object({
     location: z.string().describe('City or area to search in'),
-    category: z.enum([
-      'museums',
-      'monuments',
-      'parks',
-      'churches',
-      'theatres',
-      'historic',
-      'architecture',
-      'natural',
-      'beaches',
-      'cultural',
-      'sport',
-      'amusements',
-    ]).describe('Category of places to search for'),
+    category: z.string().min(1).describe(
+      'OpenTripMap "kinds" code(s) for the category of places to search for, comma-separated for multiple (e.g. "museums,historic" or "accomodations")'
+    ),
     limit: z.number().optional().default(10).describe('Maximum number of results'),
   }),
   execute: async (args: { location: string; category: string; limit?: number }) => {

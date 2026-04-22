@@ -9,6 +9,7 @@ import {
   checkTripSaved,
   semanticSearchTrips,
   updateTimelineRestaurants,
+  markTripUpcoming,
 } from "../controllers/savedTripController.js";
 
 const router = Router();
@@ -36,6 +37,9 @@ router.put("/:id", updateSavedTrip);
 
 // Update timeline restaurants
 router.put("/:id/timeline/restaurants", updateTimelineRestaurants);
+
+// Mark a saved trip as upcoming (confirms/sets its start date)
+router.put("/:id/upcoming", markTripUpcoming);
 
 // Delete a saved trip
 router.delete("/:id", deleteSavedTrip);

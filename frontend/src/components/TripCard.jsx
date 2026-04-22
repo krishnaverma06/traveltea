@@ -78,7 +78,9 @@ const TripCard = ({ trip, badge, onView, onDelete, isDeleting }) => {
               onDelete(trip._id);
             }}
             disabled={isDeleting}
-            className="absolute top-3 right-3 p-2 bg-red-500/90 hover:bg-red-600 text-white rounded-full transition-all duration-300 opacity-0 group-hover:opacity-100"
+            title="Remove this trip"
+            aria-label="Remove this trip"
+            className="absolute top-3 right-3 p-2 bg-red-500/90 hover:bg-red-600 text-white rounded-full transition-all duration-300 shadow-lg"
           >
             {isDeleting ? (
               <Loader2 className="w-4 h-4 animate-spin" />

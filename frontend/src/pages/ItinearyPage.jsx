@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Map } from "@/components/Map";
 import {
   apiSaveTrip,
   apiCheckTripSaved,
@@ -48,7 +49,7 @@ import { TimelineTab } from "@/components/Timeline/TimelineTab";
 
 const ItineraryPage = () => {
   const navigate = useNavigate();
-  const { tripData } = useTrip();
+  const { tripData, updateTripData } = useTrip();
   const { isAuthenticated, user } = useAuth();
   const [activeTab, setActiveTab] = useState("timeline");
   const [selectedDay, setSelectedDay] = useState(1);
@@ -67,6 +68,23 @@ const ItineraryPage = () => {
     tripData?.generatedItinerary?.itinerary ||
     tripData?.generatedItinerary ||
     null;
+
+  // Same shape Chat.jsx builds for its Map component — every activity across
+  // every day, with a valid lat/lon.
+  const mapLocations = (itinerary?.days || [])
+    .flatMap((day) => day.timeSlots || [])
+    .flatMap((slot) => slot.activities || [])
+    .filter(
+      (activity) =>
+        typeof activity.location?.lat === "number" &&
+        typeof activity.location?.lon === "number",
+    )
+    .map((activity) => ({
+      lat: activity.location.lat,
+      lon: activity.location.lon,
+      name: activity.name,
+      description: activity.category,
+    }));
 
   console.log("📊 ItineraryPage - tripData:", tripData);
   console.log("📊 ItineraryPage - itinerary:", itinerary);
@@ -225,7 +243,10 @@ const ItineraryPage = () => {
         ],
       };
 
-      await apiSaveTrip(payload, token);
+      const saveResponse = await apiSaveTrip(payload, token);
+      // So the chat assistant knows which trip is "active" for timeline
+      // edits made conversationally (see Chat.jsx's activeTripId wiring).
+      updateTripData({ savedTripId: saveResponse.savedTrip._id });
       setIsSaved(true);
       toast.success("Trip saved successfully! 🎉");
     } catch (error) {
@@ -328,6 +349,7 @@ const ItineraryPage = () => {
       // Save the trip first
       const saveResponse = await apiSaveTrip(payload, token);
       const savedTripId = saveResponse.savedTrip._id;
+      updateTripData({ savedTripId });
 
       // Now mark as upcoming
       await apiMarkTripAsUpcoming(savedTripId, { tripStartDate }, token);
@@ -1198,22 +1220,25 @@ const ItineraryPage = () => {
 
           {/* Map Tab */}
           {activeTab === "map" && (
-            <div className="h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
-              <Card className="p-12 text-center bg-white/80 backdrop-blur-sm border border-white/20 shadow-2xl rounded-3xl">
-                <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-                  <MapIcon className="w-10 h-10 text-white" />
+            <div className="h-full">
+              {mapLocations.length > 0 ? (
+                <Map locations={mapLocations} />
+              ) : (
+                <div className="h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
+                  <Card className="p-12 text-center bg-white/80 backdrop-blur-sm border border-white/20 shadow-2xl rounded-3xl">
+                    <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+                      <MapIcon className="w-10 h-10 text-white" />
+                    </div>
+                    <h3 className="text-2xl font-semibold text-gray-900 mb-4">
+                      No Locations Yet
+                    </h3>
+                    <p className="text-gray-600 mb-6 max-w-md">
+                      This itinerary doesn't have any activities with map
+                      coordinates yet.
+                    </p>
+                  </Card>
                 </div>
-                <h3 className="text-2xl font-semibold text-gray-900 mb-4">
-                  Interactive Map Coming Soon
-                </h3>
-                <p className="text-gray-600 mb-6 max-w-md">
-                  Explore your itinerary locations on an interactive map with
-                  route planning and nearby recommendations.
-                </p>
-                <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300">
-                  Enable Map Features
-                </Button>
-              </Card>
+              )}
             </div>
           )}
         </div>
