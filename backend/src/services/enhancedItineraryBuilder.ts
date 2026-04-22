@@ -260,14 +260,36 @@ export class EnhancedItineraryBuilder {
         let placeIndex = 0;
         let restaurantIndex = 0;
 
+        // Spread the ACTUAL supply across all days rather than filling each day
+        // to a fixed quota from a sequential cursor. The latter front-loaded
+        // every itinerary: a 3-day Pune leg came out 7/7/1 activities and the
+        // Goa leg ended on a completely empty day, because the cursor simply
+        // ran out of attractions before the last day.
+        const attractionCap = days * (activitiesPerDay.morning + activitiesPerDay.afternoon);
+        const attrPerDay = this.distributeEvenly(Math.min(attractions.length, attractionCap), days);
+        const restPerDay = this.distributeEvenly(
+            Math.min(restaurants.length, days * activitiesPerDay.evening),
+            days,
+        );
+
         for (let dayNum = 1; dayNum <= days; dayNum++) {
             const timeSlots: TimeSlot[] = [];
+            const attrToday = attrPerDay[dayNum - 1];
+
+            // Keep the configured morning:afternoon ratio while honouring the
+            // (possibly smaller) number actually available for this day.
+            const ratioDenom = activitiesPerDay.morning + activitiesPerDay.afternoon || 1;
+            const morningCount = Math.min(
+                activitiesPerDay.morning,
+                Math.ceil((attrToday * activitiesPerDay.morning) / ratioDenom),
+            );
+            const afternoonCount = Math.max(0, attrToday - morningCount);
 
             // Morning activities
             const morningActivities = this.selectPlacesForSlot(
                 attractions,
                 placeIndex,
-                activitiesPerDay.morning
+                morningCount
             );
             placeIndex += morningActivities.length;
 
@@ -284,7 +306,7 @@ export class EnhancedItineraryBuilder {
             const afternoonActivities = this.selectPlacesForSlot(
                 attractions,
                 placeIndex,
-                activitiesPerDay.afternoon
+                afternoonCount
             );
             placeIndex += afternoonActivities.length;
 
@@ -301,7 +323,7 @@ export class EnhancedItineraryBuilder {
             const eveningDining = this.selectPlacesForSlot(
                 restaurants,
                 restaurantIndex,
-                activitiesPerDay.evening
+                restPerDay[dayNum - 1]
             );
             restaurantIndex += eveningDining.length;
 
@@ -323,6 +345,22 @@ export class EnhancedItineraryBuilder {
         }
 
         return dayPlans;
+    }
+
+    /**
+     * Split `total` items across `days` as evenly as possible, giving the
+     * remainder to the earliest days (e.g. 15 over 3 -> [5,5,5];
+     * 16 over 3 -> [6,5,5]).
+     */
+    private distributeEvenly(total: number, days: number): number[] {
+        if (days <= 0) return [];
+        const base = Math.floor(total / days);
+        let remainder = total % days;
+        return Array.from({ length: days }, () => {
+            const n = base + (remainder > 0 ? 1 : 0);
+            if (remainder > 0) remainder--;
+            return n;
+        });
     }
 
     /**

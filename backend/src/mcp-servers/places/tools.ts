@@ -1,5 +1,37 @@
 import { z } from 'zod';
 import { openTripMapAPI } from './api.js';
+import { coerceCategoryCodes } from '../../config/opentripmap-categories.js';
+
+/**
+ * OpenTripMap's geocoder resolves bare place names only — "Prague" returns
+ * results, "attractions in Prague" returns none. The LLM naturally echoes the
+ * user's whole phrase into the query arg, so strip the common lead-ins before
+ * geocoding rather than relying on the prompt alone.
+ *
+ * Defence in depth: the schema descriptions also now ask for a bare place
+ * name, but a wrong arg must degrade to a correct search, not zero results.
+ */
+const LEAD_IN_RE =
+  /^\s*(?:(?:find|show|get|search(?:\s+for)?|list|explore)\s+(?:me\s+)?)?(?:the\s+)?(?:top\s+|best\s+|popular\s+|famous\s+|good\s+)?(?:tourist\s+)?(?:attractions?|things\s+to\s+do|places(?:\s+to\s+(?:visit|see|go))?|sights?|sightseeing|landmarks?|monuments?|museums?|beaches?|parks?|restaurants?|hotels?|activities|spots?)\s+(?:in|at|near|around|of)\s+/i;
+
+const TRAILING_RE = /\s*(?:,?\s*(?:india|usa|uk))?\s*[.!?]*\s*$/i;
+
+export function normalizePlaceQuery(raw: string): string {
+  if (!raw) return raw;
+  let q = raw.trim();
+
+  // Strip repeatedly: "show me the best attractions in Paris" -> "Paris"
+  let prev: string;
+  do {
+    prev = q;
+    q = q.replace(LEAD_IN_RE, '').trim();
+  } while (q !== prev && q.length > 0);
+
+  q = q.replace(TRAILING_RE, (m) => (m.trim().startsWith(',') ? m : '')).trim();
+
+  // Never return empty — fall back to the original rather than searching "".
+  return q.length > 0 ? q : raw.trim();
+}
 
 /**
  * Tool 1: Search Destinations
@@ -9,19 +41,26 @@ export const searchDestinationsTool = {
   name: 'search_destinations',
   description: 'Search for travel destinations, cities, or tourist attractions by name. Returns a list of places with their coordinates and categories.',
   inputSchema: z.object({
-    query: z.string().describe('The destination name or search query (e.g., "Paris", "beaches in Thailand", "Eiffel Tower")'),
+    query: z
+      .string()
+      .describe(
+        'A bare place name ONLY — a city, region, or landmark (e.g. "Paris", "Thailand", "Eiffel Tower"). ' +
+          'Never a phrase or sentence: pass "Prague", NOT "attractions in Prague" or "things to do in Prague". ' +
+          'Extract just the place from the user\'s message.',
+      ),
     limit: z.number().optional().default(10).describe('Maximum number of results to return (default: 10)'),
   }),
   execute: async (args: { query: string; limit?: number }) => {
     try {
-      const results = await openTripMapAPI.searchPlaces(args.query, args.limit || 10);
+      const query = normalizePlaceQuery(args.query);
+      const results = await openTripMapAPI.searchPlaces(query, args.limit || 10);
       
       return {
         content: [
           {
             type: 'text',
             text: JSON.stringify({
-              query: args.query,
+              query,
               count: results.length,
               destinations: results,
             }, null, 2),
@@ -159,7 +198,8 @@ export const searchRestaurantsTool = {
   execute: async (args: { location: string; cuisine?: string; limit?: number }) => {
     try {
       // First geocode the location
-      const tempResults = await openTripMapAPI.searchPlaces(args.location, 1);
+      const location = normalizePlaceQuery(args.location);
+      const tempResults = await openTripMapAPI.searchPlaces(location, 1);
       if (tempResults.length === 0) {
         return {
           content: [
@@ -188,7 +228,7 @@ export const searchRestaurantsTool = {
           {
             type: 'text',
             text: JSON.stringify({
-              location: args.location,
+              location,
               cuisine: args.cuisine,
               count: restaurants.length,
               restaurants: restaurants.map(r => ({
@@ -225,14 +265,19 @@ export const searchByCategoryTool = {
   inputSchema: z.object({
     location: z.string().describe('City or area to search in'),
     category: z.string().min(1).describe(
-      'OpenTripMap "kinds" code(s) for the category of places to search for, comma-separated for multiple (e.g. "museums,historic" or "accomodations")'
+      'OpenTripMap "kinds" code(s), comma-separated. Must be real codes from this list: ' +
+        'interesting_places, cultural, historic, natural, religion, architecture, museums, ' +
+        'theatres_and_entertainments, urban_environment, amusements, sport, beaches, foods, ' +
+        'shops, accomodations, tourist_facilities. Use "interesting_places" for a general ' +
+        '"attractions"/"things to do" request. Never invent a code such as "tourist_attraction".'
     ),
     limit: z.number().optional().default(10).describe('Maximum number of results'),
   }),
   execute: async (args: { location: string; category: string; limit?: number }) => {
     try {
       // Geocode location
-      const tempResults = await openTripMapAPI.searchPlaces(args.location, 1);
+      const location = normalizePlaceQuery(args.location);
+      const tempResults = await openTripMapAPI.searchPlaces(location, 1);
       if (tempResults.length === 0) {
         return {
           content: [
@@ -247,11 +292,15 @@ export const searchByCategoryTool = {
 
       const { latitude, longitude } = tempResults[0].location;
       
-      // Search by category
+      // Coerce the LLM's category into codes OpenTripMap actually accepts —
+      // an invented kind like "tourist_attraction" 400s, which surfaced to
+      // the user as "I couldn't find any places".
+      const category = coerceCategoryCodes(args.category);
+
       const results = await openTripMapAPI.searchByCategory(
         latitude,
         longitude,
-        args.category,
+        category,
         10000, // 10km radius
         args.limit || 10
       );
@@ -261,8 +310,8 @@ export const searchByCategoryTool = {
           {
             type: 'text',
             text: JSON.stringify({
-              location: args.location,
-              category: args.category,
+              location,
+              category,
               count: results.length,
               places: results,
             }, null, 2),

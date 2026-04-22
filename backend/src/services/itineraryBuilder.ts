@@ -7,10 +7,14 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Itinerary, DayPlan, TimeSlot, Activity, TripMetadata } from '../types/itinerary.js';
 import type { Destination } from '../mcp-servers/places/types.js';
 import { getOpenTripMapAPI } from '../mcp-servers/places/api.js';
+import { geocodePlace } from './geocoding.js';
 
 const MAX_IMAGE_ENRICHMENTS_PER_ITINERARY = 12;
 
 export class ItineraryBuilder {
+  /** Below this, a destination is treated as under-covered and the radius widens. */
+  private static readonly MIN_PLACES_FOR_ITINERARY = 8;
+
   private openTripMapAPI = getOpenTripMapAPI();
 
   /**
@@ -55,20 +59,19 @@ export class ItineraryBuilder {
 
       console.log(`📍 [ITINERARY] Coordinates: ${coords.lat}, ${coords.lon}`);
 
-      // 2. Fetch diverse places
-      const places = await this.openTripMapAPI.getItineraryPlaces(
-        coords.lat,
-        coords.lon,
-        10000 // 10km radius
-      );
+      // 2. Fetch diverse places, widening the radius for destinations whose
+      //    attractions don't sit near their own centroid.
+      const places = await this.fetchPlacesWithExpandingRadius(coords.lat, coords.lon, 10000);
 
       console.log(`✅ [ITINERARY] Found ${places.attractions.length} attractions, ${places.restaurants.length} restaurants`);
 
-      // 3. Build daily plans
+      // 3. Build daily plans. The pool is shuffled ONCE here and consumed by
+      //    cursor, so no place is scheduled on two different days — see
+      //    buildDayPlan for what this replaced.
       const days: DayPlan[] = [];
+      const pool = this.buildPlacePool(places);
       for (let dayNum = 1; dayNum <= duration; dayNum++) {
-        const dayPlan = this.buildDayPlan(dayNum, places, preferences);
-        days.push(dayPlan);
+        days.push(this.buildDayPlan(dayNum, places, preferences, pool));
       }
 
       // 4. Construct itinerary
@@ -129,15 +132,21 @@ export class ItineraryBuilder {
       // 3. Determine activities per day based on pacing and activity level
       const activitiesPerDay = this.calculateActivitiesPerDay(context.pacing, context.activityLevel);
 
-      // 4. Build daily plans with budget awareness
+      // 4. Build daily plans with budget awareness. The used-place sets are
+      // created once, here, and shared by every day — see
+      // buildBudgetAwareDayPlan's parameters for why that matters.
       const days: DayPlan[] = [];
+      const usedActivities = new Set<string>();
+      const usedRestaurants = new Set<string>();
       for (let dayNum = 1; dayNum <= duration; dayNum++) {
         const dayPlan = this.buildBudgetAwareDayPlan(
           dayNum,
           places,
           context.dailyBudget,
           activitiesPerDay,
-          context.numberOfPeople
+          context.numberOfPeople,
+          usedActivities,
+          usedRestaurants
         );
         days.push(dayPlan);
       }
@@ -299,7 +308,7 @@ export class ItineraryBuilder {
       for (let i = 0; i < sourceArray.length && selected.length < count && attempts < maxAttempts; i++) {
         attempts++;
         const place = sourceArray[i];
-        const placeId = `${place.name}-${place.location.latitude}-${place.location.longitude}`;
+        const placeId = ItineraryBuilder.placeKey(place);
 
         // Check if place is already used globally
         if (!globalUsedPlaces.has(placeId)) {
@@ -320,8 +329,8 @@ export class ItineraryBuilder {
           const estimatedCost = this.parseCost(this.estimateCost(place.category)) * numberOfPeople;
 
           if (budgetRemaining >= estimatedCost || estimatedCost === 0) {
-            const placeId = `${place.name}-${place.location.latitude}-${place.location.longitude}`;
-            if (!selected.some(p => `${p.name}-${p.location.latitude}-${p.location.longitude}` === placeId)) {
+            const placeId = ItineraryBuilder.placeKey(place);
+            if (!selected.some((p) => ItineraryBuilder.placeKey(p) === placeId)) {
               selected.push(place);
               budgetRemaining -= estimatedCost;
             }
@@ -414,7 +423,26 @@ export class ItineraryBuilder {
   /**
    * Expose getDestinationCoords as public method
    */
+  /**
+   * Resolve a destination name to coordinates.
+   *
+   * Uses the real geocoder (services/geocoding.ts — Nominatim first, then
+   * OpenTripMap), NOT a POI search. This used to take the coordinates of the
+   * first *point of interest* matching the name, which silently failed for any
+   * destination that has no named POI sitting on its own centroid: "Maldives"
+   * and "Iceland" both geocode fine (3.720,73.224 and 64.984,-18.106) but
+   * return zero POIs, so the itinerary build aborted with "Failed to geocode
+   * destination" — after the user had already paid for flights and a hotel.
+   *
+   * The POI search is kept as a fallback for the opposite case: a landmark or
+   * neighbourhood the gazetteer doesn't hold but OpenTripMap does.
+   */
   async getDestinationCoords(destination: string): Promise<{ lat: number; lon: number } | null> {
+    const geocoded = await geocodePlace(destination);
+    if (geocoded) {
+      return { lat: geocoded.lat, lon: geocoded.lon };
+    }
+
     const places = await this.openTripMapAPI.searchPlaces(destination, 1);
     if (places.length > 0) {
       return {
@@ -423,6 +451,62 @@ export class ItineraryBuilder {
       };
     }
     return null;
+  }
+
+  /**
+   * Fetch places, widening the search radius until enough turn up.
+   *
+   * A single fixed radius assumes every destination is a city whose
+   * attractions cluster around its own centroid. That breaks for anything
+   * geographically spread out: "Maldives" geocodes to 3.720,73.224, which is
+   * open water between atolls, so a 15km search returned nothing and the user
+   * got an itinerary with zero activities — after paying for it. Iceland and
+   * other country-sized destinations fail the same way.
+   *
+   * Widening is lazy: the first radius that yields enough wins, so the common
+   * city case still costs exactly one round of requests.
+   */
+  private async fetchPlacesWithExpandingRadius(
+    lat: number,
+    lon: number,
+    startRadius: number,
+  ): Promise<{
+    attractions: Destination[];
+    restaurants: Destination[];
+    nature: Destination[];
+    culture: Destination[];
+    radiusUsed: number;
+  }> {
+    const radii = [startRadius, 50_000, 150_000, 400_000].filter(
+      (r, i, arr) => i === 0 || r > arr[i - 1],
+    );
+
+    let best = { attractions: [], restaurants: [], nature: [], culture: [] } as {
+      attractions: Destination[];
+      restaurants: Destination[];
+      nature: Destination[];
+      culture: Destination[];
+    };
+    let bestCount = -1;
+    let radiusUsed = startRadius;
+
+    for (const radius of radii) {
+      const places = await this.openTripMapAPI.getItineraryPlaces(lat, lon, radius);
+      const count =
+        places.attractions.length + places.culture.length + places.nature.length + places.restaurants.length;
+
+      if (count > bestCount) {
+        best = places;
+        bestCount = count;
+        radiusUsed = radius;
+      }
+      if (count >= ItineraryBuilder.MIN_PLACES_FOR_ITINERARY) break;
+    }
+
+    if (radiusUsed !== startRadius) {
+      console.log(`🔎 [ITINERARY] Widened search to ${radiusUsed / 1000}km — ${bestCount} places found`);
+    }
+    return { ...best, radiusUsed };
   }
 
   /**
@@ -447,13 +531,16 @@ export class ItineraryBuilder {
 
       console.log(`🎯 Enhanced categories for ${travelType}:`, enhancedCategories);
 
-      // Fetch diverse places including hotels
-      const basePlaces = await this.openTripMapAPI.getItineraryPlaces(lat, lon, 15000); // Larger radius
+      // Fetch diverse places including hotels, widening if the destination is
+      // spread out (a country or island chain rather than a city).
+      const basePlaces = await this.fetchPlacesWithExpandingRadius(lat, lon, 15000);
 
       // Fetch hotels separately if needed
       let hotels: Destination[] = [];
       if (includeHotels) {
-        hotels = await this.openTripMapAPI.searchByCategory(lat, lon, 'accomodations', 10000, 10);
+        hotels = await this.openTripMapAPI.searchByCategory(
+          lat, lon, 'accomodations', Math.max(10000, basePlaces.radiusUsed), 10,
+        );
       }
 
       // Combine and categorize all places
@@ -581,7 +668,15 @@ export class ItineraryBuilder {
     places: { all: Destination[]; byCategory: Map<string, Destination[]>; total: number },
     dailyBudget: number,
     activitiesPerDay: { morning: number; afternoon: number; evening: number },
-    numberOfPeople: number
+    numberOfPeople: number,
+    // Owned by the caller and shared across every day of the trip. They used
+    // to be declared inside this function despite the comment below claiming
+    // they were global, so they reset on every day and the same attraction
+    // could be scheduled on day 1 and again on day 2 — which is exactly what
+    // happened once the agent-driven flow started generating short
+    // itineraries in places with a small pool of named attractions.
+    usedActivities: Set<string> = new Set<string>(),
+    usedRestaurants: Set<string> = new Set<string>()
   ): DayPlan {
     let budgetRemaining = dailyBudget * numberOfPeople;
 
@@ -597,9 +692,8 @@ export class ItineraryBuilder {
     const shuffledActivities = this.shuffleArray([...activities]);
     const shuffledRestaurants = this.shuffleArray([...restaurants]);
 
-    // Track used places globally to avoid repetition across days
-    const usedActivities = new Set<string>();
-    const usedRestaurants = new Set<string>();
+    // Used places are tracked globally, across every day of the trip — the
+    // sets are parameters, not locals, so day 2 never re-serves day 1.
 
     // Helper to select unique places with budget consideration
     const selectPlaces = (
@@ -614,7 +708,7 @@ export class ItineraryBuilder {
       for (let i = 0; i < sourceArray.length && selected.length < count && attempts < maxAttempts; i++) {
         attempts++;
         const place = sourceArray[i];
-        const placeId = `${place.name}-${place.location.latitude}-${place.location.longitude}`;
+        const placeId = ItineraryBuilder.placeKey(place);
 
         if (!usedSet.has(placeId)) {
           // Estimate cost for this activity
@@ -629,20 +723,27 @@ export class ItineraryBuilder {
         }
       }
 
-      // If we didn't get enough activities due to budget or uniqueness constraints,
-      // fill with remaining affordable options (allow some repetition if necessary)
+      // Last resort: the first pass came up short. It can come up short for
+      // two different reasons, and only one of them is worth relaxing.
+      //
+      // Relax the BUDGET — take a place we can't strictly afford and report
+      // its real cost, so a tight budget produces an honest, slightly
+      // over-budget day rather than an empty one.
+      //
+      // Never relax UNIQUENESS. This branch used to drop the usedSet check
+      // instead, which is how a destination with a small pool of named
+      // attractions ended up with the same wildlife sanctuary scheduled in
+      // both the morning and the afternoon of the same day. A thinner day is
+      // better than a schedule that tells the user to visit one place twice.
       if (selected.length < count && selected.length < Math.max(1, Math.floor(count / 2))) {
         for (let i = 0; i < sourceArray.length && selected.length < count; i++) {
           const place = sourceArray[i];
-          const estimatedCost = this.parseCost(this.estimateCost(place.category)) * numberOfPeople;
+          const placeId = ItineraryBuilder.placeKey(place);
+          if (usedSet.has(placeId)) continue;
 
-          if (budgetRemaining >= estimatedCost || estimatedCost === 0) {
-            const placeId = `${place.name}-${place.location.latitude}-${place.location.longitude}`;
-            if (!selected.some(p => `${p.name}-${p.location.latitude}-${p.location.longitude}` === placeId)) {
-              selected.push(place);
-              budgetRemaining -= estimatedCost;
-            }
-          }
+          selected.push(place);
+          usedSet.add(placeId);
+          budgetRemaining -= this.parseCost(this.estimateCost(place.category)) * numberOfPeople;
         }
       }
 
@@ -711,6 +812,24 @@ export class ItineraryBuilder {
    * Build a single day plan with morning/afternoon/evening activities
    * Ensures diverse activities across all days by proper distribution
    */
+  /**
+   * Build one day from shared, already-shuffled pools.
+   *
+   * This used to re-shuffle `places` on every call and then index into it with
+   * `(baseIndex + i) % length`. Both halves of that were broken:
+   *
+   *  - The modulo wrapped as soon as the pool was smaller than the itinerary's
+   *    demand (3 days x 4 activities = 12 slots against Rome's 10 attractions),
+   *    so places repeated.
+   *  - Re-shuffling per day meant `baseIndex` indexed into a DIFFERENT random
+   *    order each day, so the "unique distribution across days" the old comment
+   *    promised never actually held — the same place could land on day 1 and
+   *    day 3 at unrelated indices.
+   *
+   * Now the caller shuffles once and passes cursors, so each day consumes the
+   * next unused places. When the pool runs out the day is simply shorter,
+   * which is honest — repeating an attraction is worse than a thinner day.
+   */
   private buildDayPlan(
     dayNumber: number,
     places: {
@@ -719,76 +838,121 @@ export class ItineraryBuilder {
       nature: Destination[];
       culture: Destination[];
     },
-    preferences?: string[]
+    preferences?: string[],
+    pool?: { activities: Destination[]; restaurants: Destination[]; activityCursor: number; restaurantCursor: number },
   ): DayPlan {
-    // Combine all non-restaurant places for activities
-    const allActivities = [
-      ...places.attractions,
-      ...places.culture,
-      ...places.nature,
-    ].filter(p => p.name); // Filter out places without names
+    // Standalone call (no shared pool): build a private one so this method
+    // still works on its own, just without cross-day continuity.
+    const shared = pool ?? this.buildPlacePool(places);
 
-    // Shuffle the arrays to ensure variety across days
-    const shuffledActivities = this.shuffleArray([...allActivities]);
-    const shuffledRestaurants = this.shuffleArray([...places.restaurants]);
+    const ACTIVITIES_PER_SLOT = 2;
+    const RESTAURANTS_PER_SLOT = 2;
 
-    // Calculate unique distribution for each day
-    const activitiesPerSlot = 2;
-    const restaurantsPerSlot = 2;
-
-    // Distribute activities uniquely across days
-    const baseIndex = (dayNumber - 1) * (activitiesPerSlot * 2); // 2 slots (morning, afternoon)
-    const restaurantIndex = (dayNumber - 1) * restaurantsPerSlot;
-
-    // Get unique activities for this day, cycling through if needed
-    const getMorningActivities = () => {
-      const startIdx = baseIndex % shuffledActivities.length;
-      const activities = [];
-      for (let i = 0; i < activitiesPerSlot && shuffledActivities.length > 0; i++) {
-        const idx = (startIdx + i) % shuffledActivities.length;
-        activities.push(shuffledActivities[idx]);
-      }
-      return activities;
+    /** Take the next n unused entries, or fewer if the pool is exhausted. */
+    const take = (list: Destination[], cursorKey: 'activityCursor' | 'restaurantCursor', n: number) => {
+      const out = list.slice(shared[cursorKey], shared[cursorKey] + n);
+      shared[cursorKey] += out.length;
+      return out;
     };
 
-    const getAfternoonActivities = () => {
-      const startIdx = (baseIndex + activitiesPerSlot) % shuffledActivities.length;
-      const activities = [];
-      for (let i = 0; i < activitiesPerSlot && shuffledActivities.length > 0; i++) {
-        const idx = (startIdx + i) % shuffledActivities.length;
-        activities.push(shuffledActivities[idx]);
-      }
-      return activities;
-    };
-
-    const getEveningActivities = () => {
-      const startIdx = restaurantIndex % shuffledRestaurants.length;
-      const activities = [];
-      for (let i = 0; i < restaurantsPerSlot && shuffledRestaurants.length > 0; i++) {
-        const idx = (startIdx + i) % shuffledRestaurants.length;
-        activities.push(shuffledRestaurants[idx]);
-      }
-      return activities;
-    };
-
-    // Generate meaningful day titles based on activities
     const dayTitles = [
       'Explore the City', 'Cultural Immersion', 'Natural Wonders', 'Local Experiences',
       'Hidden Gems', 'Art & History', 'Adventure Day', 'Relaxation & Fun',
       'Local Flavors', 'Scenic Discoveries'
     ];
 
-    const title = dayTitles[(dayNumber - 1) % dayTitles.length];
-
     return {
       dayNumber,
-      title,
+      title: dayTitles[(dayNumber - 1) % dayTitles.length],
       timeSlots: [
-        this.buildTimeSlot('morning', '09:00', '12:00', getMorningActivities()),
-        this.buildTimeSlot('afternoon', '14:00', '18:00', getAfternoonActivities()),
-        this.buildTimeSlot('evening', '19:00', '22:00', getEveningActivities()),
+        this.buildTimeSlot('morning', '09:00', '12:00', take(shared.activities, 'activityCursor', ACTIVITIES_PER_SLOT)),
+        this.buildTimeSlot('afternoon', '14:00', '18:00', take(shared.activities, 'activityCursor', ACTIVITIES_PER_SLOT)),
+        this.buildTimeSlot('evening', '19:00', '22:00', take(shared.restaurants, 'restaurantCursor', RESTAURANTS_PER_SLOT)),
       ],
     };
+  }
+
+  /**
+   * Shuffled, duplicate-free activity and restaurant pools for one itinerary.
+   *
+   * The two pools are deduped against EACH OTHER, not just internally: a
+   * place can be returned by OpenTripMap as both an attraction and a
+   * restaurant, and deduping them separately still let it be scheduled twice
+   * in the same trip — once as a sight, once as a meal.
+   */
+  private buildPlacePool(places: {
+    attractions: Destination[];
+    restaurants: Destination[];
+    nature: Destination[];
+    culture: Destination[];
+  }) {
+    const activities = this.dedupePlaces([
+      ...places.attractions,
+      ...places.culture,
+      ...places.nature,
+    ]);
+    const restaurants = this.dedupePlaces([...activities, ...places.restaurants]).slice(
+      activities.length,
+    );
+
+    return {
+      activities: this.shuffleArray(activities),
+      restaurants: this.shuffleArray(restaurants),
+      activityCursor: 0,
+      restaurantCursor: 0,
+    };
+  }
+
+  /**
+   * Identity key for "is this the same place we already scheduled?".
+   *
+   * Normalised NAME only — deliberately not name+coordinates, which is what
+   * these call sites used to do. OpenTripMap returns the same landmark under
+   * several records with slightly different casing and coordinates tens of
+   * metres apart, so a coordinate-sensitive key let "Bikini Beach" and
+   * "Bikini beach" both land in one itinerary. Matches dedupePlaces, so the
+   * two scheduling paths agree on what counts as a duplicate.
+   */
+  private static placeKey(place: { name?: string }): string {
+    return (place?.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  /**
+   * Collapse the same physical place appearing more than once.
+   *
+   * Two independent sources of duplication, both real:
+   *
+   *  - OpenTripMap returns overlapping category results, so a cathedral comes
+   *    back under both `attractions` and `culture` and concatenating those
+   *    pools duplicates it before any scheduling happens.
+   *  - The same landmark can carry several xids — a Wikidata id and one or
+   *    more OSM ids for the same building — with coordinates tens of metres
+   *    apart. Observed: Hanoi's Hoa Phong Tower (N3226400740 / Q10825843, 28m
+   *    apart) and Lisbon's Praca do Comercio (R9423812 / R9218842, 120m).
+   *
+   * Keyed on the normalised NAME, not on coordinates. Coordinate bucketing was
+   * tried and is the wrong tool: any rounding wide enough to merge those two
+   * records also merges genuinely separate neighbours, and points a metre
+   * apart can still fall either side of a bucket boundary. Within a single
+   * destination's 10km radius two distinct places sharing an exact name is
+   * vanishingly rare, and losing one option costs far less than scheduling
+   * somebody to visit the same square twice in one trip.
+   */
+  private dedupePlaces(places: Destination[]): Destination[] {
+    const seen = new Set<string>();
+    const out: Destination[] = [];
+
+    for (const place of places) {
+      const name = place?.name?.trim();
+      if (!name) continue;
+
+      const key = name.toLowerCase().replace(/\s+/g, ' ');
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      out.push(place);
+    }
+    return out;
   }
 
   /**

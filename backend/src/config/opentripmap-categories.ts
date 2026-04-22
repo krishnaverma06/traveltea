@@ -474,3 +474,55 @@ export function validateCategories(categories: string[]): string[] {
 export function formatCategoriesForAPI(categories: string[]): string {
   return validateCategories(categories).join(',');
 }
+/**
+ * Every category code OpenTripMap actually accepts as a "kinds" value, built
+ * from the main categories plus every primary/secondary code in the mappings.
+ */
+const VALID_KIND_CODES: Set<string> = new Set<string>([
+  ...Object.values(MAIN_CATEGORIES),
+  ...Object.values(CATEGORY_MAPPINGS).flatMap((m) => [m.primary, ...(m.secondary || [])]),
+]);
+
+export function isValidKindCode(code: string): boolean {
+  return VALID_KIND_CODES.has(code);
+}
+
+/**
+ * Coerce an LLM-supplied category string into codes OpenTripMap will accept.
+ *
+ * The model invents plausible-sounding kinds ("tourist_attraction",
+ * "sightseeing", "landmarks") that the API rejects with a 400, which surfaced
+ * to users as "I couldn't find any places". Unknown tokens are mapped through
+ * the keyword table where possible and dropped otherwise; if nothing valid
+ * survives we fall back to the same sensible default getCategoriesFromQuery
+ * already uses rather than calling the API with garbage.
+ */
+export function coerceCategoryCodes(raw: string): string {
+  const tokens = (raw || '')
+    .split(',')
+    .map((t) => t.trim().toLowerCase().replace(/\s+/g, '_'))
+    .filter(Boolean);
+
+  const resolved = new Set<string>();
+
+  for (const token of tokens) {
+    if (isValidKindCode(token)) {
+      resolved.add(token);
+      continue;
+    }
+    // Unknown code — try the keyword table (handles "landmarks",
+    // "sightseeing", "tourist_attraction", etc. via their keyword lists).
+    for (const mapping of Object.values(CATEGORY_MAPPINGS)) {
+      if (mapping.keywords.some((k) => token.includes(k) || k.includes(token))) {
+        resolved.add(mapping.primary);
+        break;
+      }
+    }
+  }
+
+  if (resolved.size === 0) {
+    return formatCategoriesForAPI(getCategoriesFromQuery(raw));
+  }
+
+  return formatCategoriesForAPI(Array.from(resolved).slice(0, 5));
+}

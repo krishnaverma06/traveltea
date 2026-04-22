@@ -8,6 +8,7 @@ import type {
   Destination,
   GeoJSONFeatureCollection,
 } from "./types.js";
+import { geocodePlace } from "../../services/geocoding.js";
 
 // Ensure environment variables are loaded
 const __filename = fileURLToPath(import.meta.url);
@@ -41,6 +42,22 @@ function normalizeWikimediaImageUrl(url: string | undefined): string | undefined
 // ---------------------------------------------------------------------------
 
 const MIN_REQUEST_INTERVAL_MS = 250; // min gap between any two OpenTripMap requests
+
+// OpenTripMap returns plenty of unnamed OSM nodes, and transformGeoJSONFeatures
+// drops them (a place with no name is useless to show). Because the API applies
+// its `limit` BEFORE we filter, asking for exactly N could yield far fewer —
+// or zero. searchPlaces(query, 1) was the pathological case: "Rome" resolved
+// to a single unnamed node and came back empty, which silently broke
+// getDestinationCoords and therefore the whole plan_trip itinerary build,
+// while "Paris" worked purely because its nearest node happens to be named.
+// Over-fetch, filter, then slice to the caller's limit.
+const RESULT_OVERFETCH_FACTOR = 4;
+const MIN_OVERFETCH = 20;
+const MAX_OVERFETCH = 100;
+
+function overfetchLimit(limit: number): number {
+  return Math.min(Math.max(limit * RESULT_OVERFETCH_FACTOR, MIN_OVERFETCH), MAX_OVERFETCH);
+}
 const DEFAULT_RETRIES = 3;
 const BACKOFF_STEP_MS = 500; // attempt 1 -> 500ms, attempt 2 -> 1000ms, ...
 
@@ -145,20 +162,17 @@ export class OpenTripMapAPI {
    */
   async searchPlaces(query: string, limit: number = 10): Promise<Destination[]> {
     try {
-      // First, geocode the query to get coordinates
-      const geoResponse = await withRetry(
-        () =>
-          axios.get(`${BASE_URL}/geoname`, {
-            params: { name: query, apikey: this.apiKey },
-          }),
-        `geoname("${query}")`,
-      );
-
-      if (!geoResponse.data || !geoResponse.data.lat) {
+      // Geocode via the shared resolver (Nominatim, OpenTripMap as fallback)
+      // rather than OpenTripMap's /geoname directly. /geoname returns a single
+      // undisambiguated result and picked the wrong place on exact-name
+      // queries — "Leh" resolved to LEH in France rather than Leh in Ladakh.
+      // See services/geocoding.ts.
+      const geo = await geocodePlace(query);
+      if (!geo) {
         return [];
       }
 
-      const { lat, lon } = geoResponse.data;
+      const { lat, lon } = geo;
 
       // Get places around those coordinates with GeoJSON format
       const placesResponse = await withRetry(
@@ -168,7 +182,7 @@ export class OpenTripMapAPI {
               radius: 5000, // 5km radius
               lon,
               lat,
-              limit,
+              limit: overfetchLimit(limit),
               format: "geojson",
               apikey: this.apiKey,
             },
@@ -183,7 +197,7 @@ export class OpenTripMapAPI {
         return [];
       }
 
-      return this.transformGeoJSONFeatures(geoData.features);
+      return this.transformGeoJSONFeatures(geoData.features).slice(0, limit);
     } catch (error) {
       // withRetry already logged the underlying error/backoff attempts
       return [];
@@ -229,7 +243,7 @@ export class OpenTripMapAPI {
               lon,
               lat,
               kinds: category, // e.g., 'museums', 'restaurants', 'natural'
-              limit,
+              limit: overfetchLimit(limit),
               format: "geojson",
               apikey: this.apiKey,
             },
@@ -242,7 +256,8 @@ export class OpenTripMapAPI {
         return [];
       }
 
-      return this.transformGeoJSONFeatures(geoData.features);
+      // Same over-fetch/filter/slice reasoning as searchPlaces above.
+      return this.transformGeoJSONFeatures(geoData.features).slice(0, limit);
     } catch (error) {
       return [];
     }

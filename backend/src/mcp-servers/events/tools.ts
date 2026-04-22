@@ -25,7 +25,14 @@ export const searchEventsTool = {
     try {
       const today = new Date();
       const start = args.startDate && args.startDate >= addDays(today, 0) ? args.startDate : addDays(today, 0);
-      const end = args.endDate || addDays(new Date(start), args.startDate ? 7 : 30);
+
+      // `start` is clamped forward to today, but `end` used to be taken
+      // verbatim — so a model-supplied past range (observed live: startDate
+      // 2025-06-01 / endDate 2025-06-30 during 2026) produced an end BEFORE
+      // the start and a nonsensical "between 2026-08-17 and 2025-06-30" reply.
+      // Fall back to the default window whenever the range is inverted.
+      const defaultEnd = addDays(new Date(start), args.startDate ? 7 : 30);
+      const end = args.endDate && args.endDate >= start ? args.endDate : defaultEnd;
 
       const events = await ticketmasterService.getEvents(args.city, start, end);
 
