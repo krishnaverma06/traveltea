@@ -39,6 +39,7 @@ export const listSavedTripsTool = {
   description: "List the user's saved trips, most recent first. Use for requests like 'show my saved trips' or 'what trips have I saved'.",
   inputSchema: listSavedTripsSchema,
   userScoped: true,
+  signInMessage: "you'll need to be signed in for me to look at your saved trips.",
   execute: async (args: z.infer<typeof listSavedTripsSchema>) => {
     const parsed = listSavedTripsSchema.safeParse(args);
     if (!parsed.success) return fail('Invalid arguments', parsed.error.issues);
@@ -68,6 +69,7 @@ export const getUpcomingTripTool = {
   description: "Find the user's next upcoming or currently in-progress saved trip. Use for requests like 'what's my next trip' or 'when am I travelling next'.",
   inputSchema: getUpcomingTripSchema,
   userScoped: true,
+  signInMessage: "you'll need to be signed in for me to check your upcoming trips.",
   execute: async (args: z.infer<typeof getUpcomingTripSchema>) => {
     const parsed = getUpcomingTripSchema.safeParse(args);
     if (!parsed.success) return fail('Invalid arguments', parsed.error.issues);
@@ -120,6 +122,7 @@ export const getTravelPreferencesTool = {
   description: "Read the user's saved travel preferences (budget level, travel style, interests). Use for requests like 'what are my travel preferences'.",
   inputSchema: getTravelPreferencesSchema,
   userScoped: true,
+  signInMessage: "you'll need to be signed in for me to look at your travel preferences.",
   execute: async (args: z.infer<typeof getTravelPreferencesSchema>) => {
     const parsed = getTravelPreferencesSchema.safeParse(args);
     if (!parsed.success) return fail('Invalid arguments', parsed.error.issues);
@@ -150,6 +153,7 @@ export const updateTravelPreferencesTool = {
   description: "Update one or more of the user's travel preferences (budget level, travel style, interests). Only updates the fields provided — does not clear the others. Use for requests like 'set my budget to luxury' or 'add hiking to my interests'.",
   inputSchema: updateTravelPreferencesSchema,
   userScoped: true,
+  signInMessage: "you'll need to be signed in for me to update your travel preferences.",
   execute: async (args: z.infer<typeof updateTravelPreferencesSchema>) => {
     const parsed = updateTravelPreferencesSchema.safeParse(args);
     if (!parsed.success) return fail('Invalid arguments', parsed.error.issues);

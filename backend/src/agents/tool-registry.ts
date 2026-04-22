@@ -3,11 +3,27 @@ import { placesTools } from '../mcp-servers/places/tools.js';
 import { transportTools } from '../mcp-servers/transport/tools.js';
 import { webSearchTools } from '../mcp-servers/websearch/tools.js';
 import { eventsTools } from '../mcp-servers/events/tools.js';
+import { flightsTools } from '../mcp-servers/flights/tools.js';
+import { hotelsTools } from '../mcp-servers/hotels/tools.js';
 import { accountTools } from './tools/account.js';
+import { accountPresentation } from './tools/account-presentation.js';
+import { mcpHub } from '../mcp/hub.js';
+import { applyPresentation, type Presentation } from '../mcp/createDomainServer.js';
 
 /**
  * Tool Registry
- * Central registry of all available tools for the travel agent
+ *
+ * An aggregator over two execution paths:
+ *
+ *  - The 13 domain tools run inside in-process MCP servers and are called over
+ *    real `tools/call` JSON-RPC via `mcpHub`.
+ *  - The 4 account tools stay local and off the protocol. They take a
+ *    server-trusted `userId`; putting that in an MCP input schema would leak
+ *    authentication across the boundary.
+ *
+ * The tool objects themselves are still imported statically, because they
+ * remain the single local source of truth for Zod schemas — `travel-agent.ts`
+ * binds those to Gemini. Only *execution* crosses the protocol.
  */
 
 export interface Tool {
@@ -20,70 +36,72 @@ export interface Tool {
   // executor always overwrites `args.userId` from the authenticated
   // request — this flag is what tells both of those to kick in.
   userScoped?: boolean;
+  // Shown instead of calling the tool when there's no authenticated user.
+  signInMessage?: string;
 }
+
+/**
+ * Presentation for the local (non-MCP) account tools. The MCP domains get
+ * theirs at the hub's wiring site; this is the same convention on the path
+ * that doesn't cross the protocol.
+ */
+const LOCAL_PRESENTATION: Presentation = accountPresentation;
 
 export class ToolRegistry {
   private tools: Map<string, Tool> = new Map();
+  private localTools: Set<string> = new Set();
 
   constructor() {
     this.registerAllTools();
   }
 
-  /**
-   * Register all available tools
-   */
   private registerAllTools() {
-    // Register places tools
-    placesTools.forEach(tool => {
-      this.tools.set(tool.name, tool);
-    });
+    const mcpBacked = [
+      placesTools,
+      transportTools,
+      webSearchTools,
+      eventsTools,
+      flightsTools,
+      hotelsTools,
+    ];
 
-    // Register transport tools
-    transportTools.forEach(tool => {
-      this.tools.set(tool.name, tool);
-    });
+    for (const group of mcpBacked) {
+      for (const tool of group) {
+        this.tools.set(tool.name, tool as Tool);
+      }
+    }
 
-    // Register web search tools
-    webSearchTools.forEach(tool => {
-      this.tools.set(tool.name, tool);
-    });
+    // Account tools (saved trips, preferences) — local, never over MCP.
+    for (const tool of accountTools) {
+      this.tools.set(tool.name, tool as Tool);
+      this.localTools.add(tool.name);
+    }
 
-    // Register events tools
-    eventsTools.forEach(tool => {
-      this.tools.set(tool.name, tool);
-    });
-
-    // Register account tools (saved trips, preferences)
-    accountTools.forEach(tool => {
-      this.tools.set(tool.name, tool);
-    });
-
-    console.log(`📦 [TOOL REGISTRY] Registered ${this.tools.size} tools`);
+    console.log(
+      `📦 [TOOL REGISTRY] ${this.tools.size} tools ` +
+        `(${this.tools.size - this.localTools.size} via MCP, ${this.localTools.size} local)`,
+    );
   }
 
-  /**
-   * Get a tool by name
-   */
   getTool(name: string): Tool | undefined {
     return this.tools.get(name);
   }
 
-  /**
-   * Get all tools
-   */
   getAllTools(): Tool[] {
     return Array.from(this.tools.values());
   }
 
-  /**
-   * Get tool names
-   */
   getToolNames(): string[] {
     return Array.from(this.tools.keys());
   }
 
   /**
-   * Execute a tool by name
+   * Execute a tool by name.
+   *
+   * Signature and return shape are unchanged from before MCP: callers still
+   * get `{content:[{type:'text',text:<JSON>}], isError?}` and can JSON.parse
+   * content[0].text directly. `mcpHub.callTool` normalises MCP's own
+   * non-JSON error paths back into that contract.
    */
   async executeTool(name: string, args: any): Promise<any> {
     const tool = this.tools.get(name);
@@ -92,11 +110,9 @@ export class ToolRegistry {
       throw new Error(`Tool not found: ${name}`);
     }
 
-    // Enforcing as of Phase 2: args now only ever come from Gemini's
-    // structured tool_calls (schema-bound) or the fallback mapper (built
-    // against the same schemas), so a mismatch means something is actually
-    // wrong rather than pre-existing call-site drift. Use check.data (not
-    // raw args) so Zod .default()s apply centrally.
+    // Validate locally before dispatching. MCP would validate again
+    // server-side, but doing it here preserves the specific error message
+    // this app already returns, and applies Zod .default()s centrally.
     const check = tool.inputSchema?.safeParse?.(args);
     if (check && !check.success) {
       console.warn(`⚠️ [TOOL REGISTRY] Args for "${name}" failed schema validation:`, check.error.issues);
@@ -111,75 +127,16 @@ export class ToolRegistry {
       };
     }
 
-    console.log(`🔧 [TOOL REGISTRY] Executing tool: ${name}`);
-    return await tool.execute(check ? check.data : args);
-  }
+    const validated = check ? check.data : args;
 
-  /**
-   * Execute multiple tools in parallel
-   */
-  async executeTools(toolCalls: Array<{ name: string; args: any }>): Promise<any[]> {
-    console.log(`🔧 [TOOL REGISTRY] Executing ${toolCalls.length} tools in parallel`);
-    
-    const results = await Promise.allSettled(
-      toolCalls.map(({ name, args }) => this.executeTool(name, args))
-    );
+    if (this.localTools.has(name)) {
+      console.log(`🔧 [TOOL REGISTRY] Executing local tool: ${name}`);
+      const result = await tool.execute(validated);
+      return applyPresentation(result, LOCAL_PRESENTATION[name], `LOCAL:${name}`);
+    }
 
-    return results.map((result, index) => {
-      if (result.status === 'fulfilled') {
-        return result.value;
-      } else {
-        console.error(`Tool ${toolCalls[index].name} failed:`, result.reason);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({ error: `Tool execution failed: ${result.reason}` }),
-            },
-          ],
-          isError: true,
-        };
-      }
-    });
-  }
-
-  /**
-   * Get tool descriptions for LLM context
-   */
-  getToolDescriptions(): string {
-    const descriptions = this.getAllTools().map(tool => 
-      `- ${tool.name}: ${tool.description}`
-    );
-    return descriptions.join('\n');
-  }
-
-  /**
-   * Map intent to tools
-   */
-  getToolsForIntent(intent: string): string[] {
-    const intentToolMap: Record<string, string[]> = {
-      search_destination: ['search_destinations', 'get_place_details'],
-      search_attractions: ['search_destinations', 'get_nearby_attractions', 'search_by_category'],
-      search_hotels: ['search_destinations'], // Placeholder until hotel tool is added
-      search_flights: ['calculate_distance'], // Placeholder until flight tool is added
-      search_restaurants: ['search_restaurants'],
-      plan_trip: ['search_destinations', 'get_nearby_attractions', 'search_restaurants', 'calculate_distance'],
-      get_details: ['get_place_details'],
-      find_nearby: ['get_nearby_attractions'],
-      calculate_distance: ['calculate_distance'],
-      get_directions: ['get_directions'],
-      web_search: ['web_search', 'search_travel_tips'],
-      estimate_budget: ['web_search'],
-      search_events: ['search_events'],
-      list_saved_trips: ['list_saved_trips'],
-      get_upcoming_trip: ['get_upcoming_trip'],
-      get_travel_preferences: ['get_travel_preferences'],
-      update_travel_preferences: ['update_travel_preferences'],
-      casual_chat: [],
-      unknown: [],
-    };
-
-    return intentToolMap[intent] || [];
+    console.log(`🔧 [TOOL REGISTRY] Executing via MCP: ${name}`);
+    return await mcpHub.callTool(name, validated);
   }
 }
 
