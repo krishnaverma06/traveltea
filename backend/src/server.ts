@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB } from './config/database.js';
+import { mcpHub } from './mcp/hub.js';
 import chatRoutes from './routes/chat.js';
 import { setSocketIO } from './controllers/chatController.js';
 import authRoutes from "./routes/authRoutes.js";
@@ -16,6 +17,9 @@ import savedTripRoutes from './routes/savedTripRoutes.js'
 import searchRoutes from './routes/searchRoutes.js'
 import exploreRoutes from './routes/exploreRoutes.js'
 import travelDataRoutes from './routes/travelDataRoutes.js'
+import bookingRoutes from './routes/bookingRoutes.js'
+import travelSearchRoutes from './routes/travelSearchRoutes.js'
+import transactionRoutes from './routes/transactionRoutes.js'
 
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
@@ -68,6 +72,9 @@ app.use("/api/saved-trips", savedTripRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/explore", exploreRoutes);
 app.use("/api/travel-data", travelDataRoutes);
+app.use("/api/bookings", bookingRoutes);
+app.use("/api/travel-search", travelSearchRoutes);
+app.use("/api/transactions", transactionRoutes);
 
 // Set Socket.io instance for chat controller
 setSocketIO(io);
@@ -110,7 +117,13 @@ const startServer = async () => {
   try {
     // Connect to MongoDB
     await connectDB();
-    
+
+    // Warm start for the in-process MCP servers. Readiness is memoized inside
+    // the hub, so this is an optimization rather than a correctness
+    // requirement — but doing it here means the first chat request doesn't
+    // pay the connect cost.
+    await mcpHub.init();
+
     httpServer.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📡 Socket.io listening for connections`);

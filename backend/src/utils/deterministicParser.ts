@@ -1,3 +1,26 @@
+/**
+ * Removes a trailing location/scope qualifier from a captured activity name:
+ *   "osho ashram from day 2"      -> "osho ashram"
+ *   "parvati hill on day 3"       -> "parvati hill"
+ *   "amby valley from the trip"   -> "amby valley"
+ * Leaves names that merely contain such words intact ("day trip to Lonavala").
+ */
+function stripScopeQualifier(raw: string): string {
+  let name = raw.trim();
+
+  // "... from|on|in day N"
+  const dayQualifier = name.match(/^(.*?)[\s,]+(?:from|on|in|of)\s+day\s+\d+\s*$/i);
+  if (dayQualifier) return dayQualifier[1].trim();
+
+  // "... from|out of [the] itinerary|trip|plan|schedule|list"
+  const scopeQualifier = name.match(
+    /^(.*?)[\s,]+(?:from|out\s+of)\s+(?:the\s+|my\s+)?(?:itinerary|trip|plan|schedule|list)\s*$/i,
+  );
+  if (scopeQualifier) return scopeQualifier[1].trim();
+
+  return name;
+}
+
 export class DeterministicCommandParser {
   /**
    * Attempts to parse a deterministic timeline edit command from the user's query.
@@ -21,9 +44,18 @@ export class DeterministicCommandParser {
     if (deleteMatch) {
       // Avoid falsely capturing complex intents (e.g. "delete this because it's too hectic")
       if (text.includes('because') || text.includes('if')) return null;
+
+      // The capture group is greedy, so a perfectly normal phrasing like
+      // "remove Osho Ashram from day 2" used to look for an activity literally
+      // named "osho ashram from day 2" and report it as missing. Strip the
+      // trailing scope qualifier before matching. The mutation engine keys
+      // deletes on activityName alone, so the day is informational only.
+      const activityName = stripScopeQualifier(deleteMatch[1]);
+      if (!activityName) return null;
+
       return [{
         action: 'delete',
-        activityName: deleteMatch[1].trim()
+        activityName
       }];
     }
 

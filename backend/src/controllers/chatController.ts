@@ -8,6 +8,25 @@ import { travelAgent } from '../agents/travel-agent.js';
  * Chat Controller - Handles chat requests with Socket.io streaming
  */
 
+/**
+ * How long a single agent turn may take before the request is abandoned.
+ *
+ * Was 30s, which is under what a legitimate turn actually costs. Measured on a
+ * cold destination: query embedding ~0.9s + RAG retrieval ~0.3s + the planner's
+ * tool-calling LLM round trip + itinerary construction ~5.5s (geocode, place
+ * fetch, image enrichment). Gemini's own latency is the variable part, and a
+ * cold city like Kyoto measured 30.1s end to end — just over the line.
+ *
+ * That made the failure mode actively wasteful: the itinerary was fully built
+ * server-side and then thrown away, and the user got "Failed to process your
+ * message" for work that had actually succeeded. The budget is now set above
+ * the real cost rather than under it.
+ *
+ * frontend/src/pages/Chat.jsx's CLIENT_RESPONSE_TIMEOUT_MS must stay above
+ * this, or the client gives up on responses the server is still going to send.
+ */
+const AGENT_TIMEOUT_MS = 75_000;
+
 let io: SocketIOServer | null = null;
 
 /**
@@ -74,7 +93,10 @@ export async function sendMessage(req: Request, res: Response) {
     // whole process by default — there's no global handler for it).
     let timeoutId: NodeJS.Timeout;
     const timeoutPromise = new Promise<any>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('Agent timeout after 30 seconds')), 30000);
+      timeoutId = setTimeout(
+        () => reject(new Error(`Agent timeout after ${AGENT_TIMEOUT_MS / 1000} seconds`)),
+        AGENT_TIMEOUT_MS,
+      );
     });
 
     const agentPromise = travelAgent.chat(message, convId, req.userId, activeTripId, timelineVersion, mutationId);
@@ -140,6 +162,22 @@ export async function sendMessage(req: Request, res: Response) {
       aiResponse = String(aiResponse);
     }
 
+    // Sync pending-booking state (Phase 4). undefined = not a booking
+    // turn, leave as-is; null = clear; object = set/refresh. Written
+    // before the existing assistant-message save below — no extra
+    // conversation.save() call needed.
+    if (agentResult.pendingBooking !== undefined) {
+      conversation.pendingBooking = agentResult.pendingBooking;
+    }
+
+    // Same three-state contract for the agent-driven trip-planning flow
+    // (Phase 18): undefined = not a planning turn, null = resolved, object =
+    // still in progress. Persisted so a page reload restores the card the
+    // flow is currently waiting on.
+    if (agentResult.pendingTrip !== undefined) {
+      conversation.pendingTrip = agentResult.pendingTrip;
+    }
+
     // Add AI response to conversation
     conversation.messages.push({
       role: 'assistant',
@@ -157,7 +195,13 @@ export async function sendMessage(req: Request, res: Response) {
         message: aiResponse,
         conversationId: convId,
         itinerary: agentResult.itinerary,
-        updatedTrip: updatedTrip // Send it back just in case the client wants it
+        updatedTrip: updatedTrip, // Send it back just in case the client wants it
+        // Structured booking data (Phase 8) — was already computed for the
+        // Mongo sync above, just wasn't relayed to the client before now.
+        pendingBooking: agentResult.pendingBooking,
+        bookingResult: agentResult.bookingResult,
+        pendingTrip: agentResult.pendingTrip,
+        tripPlanResult: agentResult.tripPlanResult,
       });
       console.log('✅ [SOCKET] Event emitted successfully');
     } else {
@@ -172,24 +216,30 @@ export async function sendMessage(req: Request, res: Response) {
       message: aiResponse,
       itinerary: agentResult.itinerary,
       updatedTrip,
+      pendingBooking: agentResult.pendingBooking,
+      bookingResult: agentResult.bookingResult,
+      pendingTrip: agentResult.pendingTrip,
+      tripPlanResult: agentResult.tripPlanResult,
       timestamp: new Date(),
     });
 
   } catch (error) {
     console.error('Chat error:', error);
 
-    // Emit error only to sockets that joined this conversation's room
+    // A timeout is not the same failure as a crash, and saying so matters:
+    // the work usually completed server-side and the user's next attempt will
+    // hit warm caches, so "try again" is genuinely the right advice here in a
+    // way it isn't for a real error.
+    const timedOut = error instanceof Error && error.message.includes('Agent timeout');
+    const message = timedOut
+      ? "That took longer than I'm allowed to wait for. Most of the work is cached now — asking again should be much quicker."
+      : 'Failed to process your message. Please try again.';
+
     if (io) {
-      io.to(convId).emit('agent:error', {
-        error: 'Failed to process your message',
-        conversationId: convId
-      });
+      io.to(convId).emit('agent:error', { error: message, conversationId: convId });
     }
 
-    return res.status(500).json({
-      error: 'Failed to process your message. Please try again.',
-      conversationId: convId,
-    });
+    return res.status(timedOut ? 504 : 500).json({ error: message, conversationId: convId });
   }
 }
 
@@ -214,6 +264,11 @@ export async function getConversation(req: Request, res: Response) {
       conversationId: conversation.conversationId,
       messages: conversation.messages,
       metadata: conversation.metadata,
+      // Lets a reloaded page restore an in-progress confirmation card
+      // instead of it silently vanishing — was already persisted here,
+      // just never returned before.
+      pendingBooking: conversation.pendingBooking || null,
+      pendingTrip: conversation.pendingTrip || null,
       createdAt: conversation.createdAt,
       updatedAt: conversation.updatedAt,
     });

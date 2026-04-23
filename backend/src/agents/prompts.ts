@@ -10,25 +10,6 @@ Your goal is to help users plan amazing trips by:
 3. Providing detailed information about places
 4. Creating personalized travel recommendations
 
-## Available Tools
-
-You have access to these MCP tools:
-
-### search_destinations
-Search for travel destinations, cities, or attractions by name.
-- Use when: User mentions a specific place or asks "what's in [location]"
-- Example: User says "I want to visit Paris" → search_destinations("Paris")
-
-### get_place_details
-Get detailed information about a specific place (description, ratings, images).
-- Use when: User wants to know more about a specific attraction
-- Example: User asks "Tell me about the Eiffel Tower" → get_place_details(xid)
-
-### get_nearby_attractions
-Find attractions near specific GPS coordinates.
-- Use when: Planning an itinerary or finding things to do in an area
-- Example: User asks "What's near the Louvre?" → get_nearby_attractions(lat, lon)
-
 ## Guidelines
 
 1. **Be conversational**: Speak naturally, like a knowledgeable travel friend
@@ -69,13 +50,37 @@ with what arguments — you are not writing the reply itself.
 Rules:
 - Prefer calling at most ONE tool per turn. Only call more than one if the
   request genuinely needs two independent lookups to answer.
-- Use "plan_trip" only when the user wants a brand-new multi-day itinerary
-  built from scratch.
+- Use "plan_trip" when the user wants a brand-new multi-day itinerary built
+  from scratch and nothing more — just the day-by-day plan, no bookings.
+- Use "plan_full_trip" when they want the whole trip arranged, not only
+  planned: "plan my trip", "plan and book a trip to Goa", "organise
+  everything for me", "book my flights and hotel and make me an itinerary".
+  That flow collects the details, books a flight and hotel, takes payment,
+  and generates the itinerary itself — so call it even when destination,
+  dates, budget or trip style are all still unknown. Leave those arguments
+  out rather than guessing; the flow asks for whatever is missing. Don't ask
+  for the details yourself in your reply; call the tool.
 - Use "edit_timeline" only when the user wants to modify a timeline/
   itinerary they already have open (move/delete/add/swap/rename/undo/redo).
   Never use it for account-level preferences.
 - Use "update_travel_preferences" only for the user's saved account settings
   (budget/travel style/interests) — never for editing a specific trip's plan.
+- Distinguish browsing from booking. "Find/show/what hotels are in X",
+  "how much are hotels in X" are SEARCHES — use "search_hotels", which just
+  lists options. Reserve "book_hotel" for an actual intent to book: "book a
+  hotel in X", "reserve a room", "I want to stay at...". Sending a browse
+  into the booking flow opens a confirmation the user never asked for.
+  Neither is for a full multi-day itinerary (use "plan_trip") or a general
+  list of places (use "search_by_category").
+- Same split for flights: "find/show flights from A to B" is "search_flights";
+  "book a flight from A to B" is "book_flight".
+- Call "book_hotel"/"book_flight" even if the destination/origin/departDate
+  aren't known yet — leave those fields out rather than guessing, and the
+  booking flow will ask the user for whatever's missing on its own. Don't
+  ask for missing booking details yourself in your reply; call the tool.
+- Only set confirmed=true on "book_hotel"/"book_flight" if the user has
+  already explicitly told you to go ahead and book a specific option in
+  this same message — never for an initial search.
 - Never fabricate a userId, placeId, or xid — only supply arguments you can
   actually infer from the user's message. Leave a field out if you don't
   know it; don't guess.
@@ -83,27 +88,29 @@ Rules:
   or something you can answer directly from what you already know — don't
   call a tool at all.`;
 
-export const INTENT_CLASSIFIER_PROMPT = `Analyze the user's message and classify their intent.
-
-Possible intents:
-- SEARCH_DESTINATION: User wants to find places or attractions
-- GET_DETAILS: User wants detailed info about a specific place
-- FIND_NEARBY: User wants to find things near a location
-- PLAN_TRIP: User wants to create an itinerary
-- CASUAL_CHAT: General conversation or greeting
-- REFINEMENT: User wants to modify a previous suggestion
-
-Return ONLY the intent name, nothing else.`;
-
-export const RESPONSE_FORMATTER_PROMPT = `You are a response formatter for a travel planning agent.
-
-Given raw data from travel APIs, format it into a conversational, helpful response.
-
-Guidelines:
-- Make it sound natural, not robotic
-- Highlight key information
-- Use appropriate emojis (but don't overdo it)
-- Structure with bullet points or numbers for readability
-- End with a question or suggestion for next steps
-
-Remember: You're not just presenting data - you're telling a story about amazing places.`;
+/**
+ * Today's date, rendered for the planner prompt.
+ *
+ * Computed per call, never cached in a module-level const: the server runs for
+ * days, and a date frozen at process start would silently drift.
+ *
+ * Without this the model had no idea what "today" was and dated everything
+ * from its training data — "events in Berlin next month" came back as
+ * startDate 2025-06-01 / endDate 2025-06-30 in the middle of 2026. The same
+ * guesswork drives search_flights.departDate (a required field) and
+ * search_hotels' check-in/out, so relative dates were wrong across the board.
+ */
+export function currentDateContext(now = new Date()) {
+  const iso = now.toISOString().split('T')[0];
+  const pretty = now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+  return `Today's date is ${iso} (${pretty}).
+Resolve every relative date against it — "next month", "this weekend",
+"tomorrow", "in September" — and always emit dates as YYYY-MM-DD.
+Never emit a date in the past for a future trip.`;
+}
