@@ -2,10 +2,40 @@ import mongoose from "mongoose";
 import SavedTrip from "../models/SavedTrip.js";
 import { getOpenTripMapAPI } from "../mcp-servers/places/api.js";
 import { generateEmbedding, buildTripSummary } from "../services/embedding.js";
+import { searchSavedTrips } from "../services/tripSearch.js";
+import { saveItineraryAsTrip } from "../services/tripPersistence.js";
 import { ingestTripKnowledge, updateTripKnowledge, deleteTripKnowledge } from "../vector/services/trip-knowledge.service.js";
 import { updateUserProfileKnowledge } from "../vector/services/user-profile.service.js";
 import { weatherService } from "../services/weatherService.js";
 import { ticketmasterService } from "../services/ticketmasterService.js";
+
+/**
+ * Mongoose reports bad client input as CastError (malformed ObjectId) and
+ * ValidationError (schema violations). Returning 500 for those hides genuine
+ * 4xx conditions and makes the API look broken to callers — map them here so
+ * every handler in this file reports the right class of failure.
+ */
+function sendError(res, error, message) {
+  if (error?.name === "CastError") {
+    return res.status(400).json({
+      error: "Invalid identifier",
+      details: `${error.path}: ${error.value}`,
+    });
+  }
+  if (error?.name === "ValidationError") {
+    const details =
+      Object.values(error.errors || {})
+        .map((e) => e.message)
+        .join("; ") || error.message;
+    return res.status(400).json({ error: "Validation failed", details });
+  }
+  if (error?.code === 11000) {
+    return res.status(409).json({ error: "Duplicate resource", details: error.message });
+  }
+  console.error(message, error);
+  return res.status(500).json({ error: message, details: error?.message });
+}
+
 // Escape regex metacharacters so user-supplied search text can't be used
 // to build unexpected/expensive patterns.
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -171,11 +201,7 @@ export const saveTrip = async (req, res) => {
       savedTrip,
     });
   } catch (error) {
-    console.error("Error saving trip:", error);
-    res.status(500).json({
-      error: "Failed to save trip",
-      details: error.message,
-    });
+    return sendError(res, error, "Failed to save trip");
   }
 };
 
@@ -213,11 +239,7 @@ export const getSavedTrips = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching saved trips:", error);
-    res.status(500).json({
-      error: "Failed to fetch saved trips",
-      details: error.message,
-    });
+    return sendError(res, error, "Failed to fetch saved trips");
   }
 };
 
@@ -239,11 +261,7 @@ export const getSavedTrip = async (req, res) => {
 
     res.json(savedTrip);
   } catch (error) {
-    console.error("Error fetching saved trip:", error);
-    res.status(500).json({
-      error: "Failed to fetch saved trip",
-      details: error.message,
-    });
+    return sendError(res, error, "Failed to fetch saved trip");
   }
 };
 
@@ -283,11 +301,7 @@ export const updateSavedTrip = async (req, res) => {
     // Fire-and-forget: update user profile
     updateUserProfileKnowledge(req.userId).catch(() => {});
   } catch (error) {
-    console.error("Error updating saved trip:", error);
-    res.status(500).json({
-      error: "Failed to update saved trip",
-      details: error.message,
-    });
+    return sendError(res, error, "Failed to update saved trip");
   }
 };
 
@@ -320,11 +334,7 @@ export const markTripUpcoming = async (req, res) => {
       savedTrip,
     });
   } catch (error) {
-    console.error("Error marking trip as upcoming:", error);
-    res.status(500).json({
-      error: "Failed to mark trip as upcoming",
-      details: error.message,
-    });
+    return sendError(res, error, "Failed to mark trip as upcoming");
   }
 };
 
@@ -354,11 +364,7 @@ export const deleteSavedTrip = async (req, res) => {
     // Fire-and-forget: update user profile
     updateUserProfileKnowledge(req.userId).catch(() => {});
   } catch (error) {
-    console.error("Error deleting saved trip:", error);
-    res.status(500).json({
-      error: "Failed to delete saved trip",
-      details: error.message,
-    });
+    return sendError(res, error, "Failed to delete saved trip");
   }
 };
 
@@ -390,15 +396,18 @@ export const checkTripSaved = async (req, res) => {
       savedTrip: existingTrip,
     });
   } catch (error) {
-    console.error("Error checking if trip is saved:", error);
-    res.status(500).json({
-      error: "Failed to check trip status",
-      details: error.message,
-    });
+    return sendError(res, error, "Failed to check trip status");
   }
 };
 
-// Semantic search across saved trips using Atlas Vector Search
+// Hybrid (lexical + semantic) search across a user's saved trips.
+//
+// Was pure $vectorSearch against an index that did not exist, so every request
+// threw and silently fell through to a regex fallback — semantic search had
+// never actually run in production. The index is created by
+// `npm run fix:trip-index`; the ranking, thresholds and lexical/semantic merge
+// now live in services/tripSearch.ts so this endpoint and the global search
+// bar cannot drift apart.
 export const semanticSearchTrips = async (req, res) => {
   try {
     const query = (req.query.q || "").trim();
@@ -406,71 +415,51 @@ export const semanticSearchTrips = async (req, res) => {
       return res.json({ savedTrips: [] });
     }
 
-    // 1. Embed the search query
-    const queryEmbedding = await generateEmbedding(query);
-
-    // 2. Atlas $vectorSearch aggregation
-    const results = await SavedTrip.aggregate([
-      {
-        $vectorSearch: {
-          index: "trip_semantic_search",
-          path: "embedding",
-          queryVector: queryEmbedding,
-          numCandidates: 50,
-          limit: 20,
-          filter: {
-            user: new mongoose.Types.ObjectId(req.userId),
-          },
-        },
-      },
-      {
-        $addFields: { score: { $meta: "vectorSearchScore" } },
-      },
-      {
-        $match: { score: { $gte: 0.75 } } // Filter out low-relevance matches (increased for strictness)
-      },
-      {
-        // Exclude the large embedding array from results
-        $project: { embedding: 0 },
-      },
-    ]);
+    const result = await searchSavedTrips(req.userId, query);
 
     console.log(
-      `🔍 Semantic search for "${query}" → ${results.length} results (user: ${req.userId})`
+      `🔍 Trip search "${query}" → ${result.trips.length} results ` +
+        `(lexical ${result.lexicalCount}, semantic ${result.semanticCount}, ` +
+        `semanticAvailable=${result.semanticAvailable}, user: ${req.userId})`
     );
-    // Log the scores so we can see how well it's matching
-    results.forEach(r => console.log(`   - [Score: ${r.score.toFixed(3)}] ${r.title}`));
 
-    res.json({ savedTrips: results });
+    // `semantic` tells the client whether the semantic half actually ran, so a
+    // missing/building index degrades visibly rather than looking like "no
+    // matches" — the exact confusion that hid this bug.
+    res.json({ savedTrips: result.trips, semantic: result.semanticAvailable });
   } catch (error) {
-    console.error("Error in semantic search:", error);
+    return sendError(res, error, "Failed to search trips");
+  }
+};
 
-    // Fallback to regex search if vector search fails
-    // (e.g., index not yet created, or no embeddings yet)
-    try {
-      const safeQuery = escapeRegex(req.query.q || "");
-      const fallbackResults = await SavedTrip.find({
-        user: req.userId,
-        $or: [
-          { title: { $regex: safeQuery, $options: "i" } },
-          { description: { $regex: safeQuery, $options: "i" } },
-          { tags: { $in: [new RegExp(safeQuery, "i")] } },
-          { "cities.name": { $regex: safeQuery, $options: "i" } },
-        ],
-      })
-        .sort({ createdAt: -1 })
-        .limit(20);
+// POST /api/saved-trips/from-itinerary
+//
+// Saves an itinerary the agent generated in chat. The chat itinerary shape
+// (tripMetadata.duration / .travelers) does not match the SavedTrip schema
+// (totalDays / numberOfPeople), and the mapping plus the embedding and vector
+// ingestion all live in services/tripPersistence.ts — the same helper the
+// agent's own pipeline uses, so a trip saved from chat is indistinguishable
+// from one saved by the planner.
+export const saveItineraryFromChat = async (req, res) => {
+  try {
+    const { itinerary, title, startDate, travelType, travelers, budgetTotal } = req.body || {};
 
-      console.log(
-        `🔍 Semantic search fallback (regex) → ${fallbackResults.length} results`
-      );
-      return res.json({ savedTrips: fallbackResults, fallback: true });
-    } catch (fallbackError) {
-      res.status(500).json({
-        error: "Failed to search trips",
-        details: error.message,
-      });
+    if (!itinerary || !Array.isArray(itinerary.days) || itinerary.days.length === 0) {
+      return res.status(400).json({ error: "An itinerary with at least one day is required" });
     }
+
+    const trip = await saveItineraryAsTrip(req.userId, itinerary, {
+      title,
+      startDate,
+      travelType,
+      travelers,
+      budgetTotal,
+      source: "chat",
+    });
+
+    return res.status(201).json({ savedTrip: trip });
+  } catch (error) {
+    return sendError(res, error, "Failed to save this itinerary");
   }
 };
 
@@ -492,10 +481,6 @@ export const updateTimelineRestaurants = async (req, res) => {
 
     res.json(savedTrip);
   } catch (error) {
-    console.error("Error updating timeline restaurants:", error);
-    res.status(500).json({
-      error: "Failed to update timeline restaurants",
-      details: error.message,
-    });
+    return sendError(res, error, "Failed to update timeline restaurants");
   }
 };

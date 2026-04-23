@@ -2,6 +2,7 @@ import SavedTrip from "../models/SavedTrip.js";
 import { getOpenTripMapAPI } from "../mcp-servers/places/api.js";
 import { ingestSearchKnowledge } from "../vector/services/search-knowledge.service.js";
 import { createChatModel } from "../config/llm.js";
+import { sharedCache } from "../utils/cache.js";
 
 const DEFAULT_QUERY = "Paris";
 
@@ -33,26 +34,36 @@ export const getDestinations = async (req, res) => {
   }
 };
 
+/**
+ * Pick the spelling to show for a group of case-variant city names.
+ * Prefers one that's already capitalised ("Paris" over "paris"); if none is,
+ * title-cases the normalised key so "banglore" doesn't render lowercase.
+ */
+const pickDisplayName = (spellings, normalisedKey) => {
+  const capitalised = spellings.filter((s) => /^\p{Lu}/u.test(s));
+  if (capitalised.length > 0) {
+    // Longest wins as a tiebreak — "New York City" over a truncated variant.
+    return capitalised.sort((a, b) => b.length - a.length)[0];
+  }
+  return normalisedKey.replace(/(^|\s|-)\p{Ll}/gu, (m) => m.toUpperCase());
+};
+
 export const getTrending = async (req, res) => {
   try {
-    const topCities = await SavedTrip.aggregate([
-      { $unwind: "$cities" },
-      { $group: { _id: "$cities.name", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 8 },
-    ]);
+    // Cached for an hour. Trending is derived from saved trips, so it barely
+    // moves — while computing it costs up to 14 OpenTripMap round trips, and
+    // api.ts deliberately paces every one of those 250ms apart to avoid 429s.
+    // That throttle is the real floor here (parallelising the calls alone only
+    // took ~7.4s to ~6.7s), so the win has to come from not recomputing it on
+    // every page load. Global key: trending is the same for all users.
+    const trending = await sharedCache.fetchOrCache(
+      'explore:trending:v1',
+      () => computeTrending(),
+      3600,
+      { provider: 'ExploreTrending' },
+    );
 
-    const trending = [];
-    for (const city of topCities) {
-      const results = await getOpenTripMapAPI().searchPlaces(city._id, 1);
-      if (results[0]) {
-        trending.push({ ...results[0], name: city._id, tripCount: city.count });
-      }
-    }
-
-    const enrichedTrending = await getOpenTripMapAPI().enrichWithPhotos(trending, trending.length);
-
-    res.json({ trending: enrichedTrending });
+    res.json({ trending });
   } catch (error) {
     console.error("Error fetching trending destinations:", error);
     res.status(500).json({
@@ -60,6 +71,55 @@ export const getTrending = async (req, res) => {
       details: error.message,
     });
   }
+};
+
+const TRENDING_SIZE = 8;
+
+const computeTrending = async () => {
+  // Group case-insensitively (and trimmed). Grouping on the raw name split
+  // "Paris" and "paris" into two entries of count 1 each — which both
+  // rendered as duplicate cards when they made the cut, and understated the
+  // city's real popularity so it ranked below cities with fewer actual trips.
+  //
+  // Over-fetch candidates: not every city name resolves in OpenTripMap (a
+  // user's "banglore" typo doesn't, and neither does "Bengaluru"), and an
+  // unresolved city is dropped. Taking exactly TRENDING_SIZE candidates meant
+  // the row silently shrank — observed returning 6, 7 and 8 items on
+  // consecutive loads. Ask for twice as many and keep the first that resolve.
+  const topCities = await SavedTrip.aggregate([
+    { $unwind: "$cities" },
+    {
+      $group: {
+        _id: { $toLower: { $trim: { input: "$cities.name" } } },
+        count: { $sum: 1 },
+        spellings: { $addToSet: "$cities.name" },
+      },
+    },
+    { $sort: { count: -1, _id: 1 } },
+    { $limit: TRENDING_SIZE * 2 },
+  ]);
+
+  // Look the cities up concurrently. This was a sequential await inside a
+  // for-loop, so the endpoint cost the sum of up to 8 OpenTripMap round
+  // trips (~7s warm, worse cold) when they can all run at once.
+  const settled = await Promise.all(
+    topCities.map(async (city) => {
+      const name = pickDisplayName(city.spellings || [], city._id);
+      try {
+        const results = await getOpenTripMapAPI().searchPlaces(name, 1);
+        return results[0] ? { ...results[0], name, tripCount: city.count } : null;
+      } catch (err) {
+        // One unresolvable city must not take down the whole endpoint.
+        console.warn(`[trending] lookup failed for "${name}": ${err.message}`);
+        return null;
+      }
+    }),
+  );
+
+  // Promise.all preserves input order, so the count-desc ranking survives.
+  const trending = settled.filter(Boolean).slice(0, TRENDING_SIZE);
+
+  return await getOpenTripMapAPI().enrichWithPhotos(trending, trending.length);
 };
 
 export const getRecommendations = async (req, res) => {

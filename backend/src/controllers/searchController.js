@@ -1,8 +1,6 @@
-import SavedTrip from "../models/SavedTrip.js";
+import { searchSavedTrips } from "../services/tripSearch.js";
 import { getOpenTripMapAPI } from "../mcp-servers/places/api.js";
 import { createChatModel } from "../config/llm.js";
-
-const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const buildTripCandidates = (trips) =>
   trips.map((trip) => ({
@@ -52,18 +50,15 @@ export const getSearchSuggestions = async (req, res) => {
       return res.json({ suggestions: [] });
     }
 
-    const safeQuery = escapeRegex(query);
-    const tripMatches = await SavedTrip.find({
-      user: req.userId,
-      $or: [
-        { title: { $regex: safeQuery, $options: "i" } },
-        { description: { $regex: safeQuery, $options: "i" } },
-        { tags: { $in: [new RegExp(safeQuery, "i")] } },
-        { "cities.name": { $regex: safeQuery, $options: "i" } },
-      ],
-    }).limit(10);
-
-    const destinationMatches = await getOpenTripMapAPI().searchPlaces(query, 8);
+    // Same hybrid retrieval the Saved Trips page uses (services/tripSearch.ts),
+    // rather than the regex-only lookup this used to do — typing "beach" here
+    // now finds a coastal trip the user saved, not just titles containing the
+    // literal word. Run alongside the destination lookup, not after it.
+    const [tripSearch, destinationMatches] = await Promise.all([
+      searchSavedTrips(req.userId, query, 10),
+      getOpenTripMapAPI().searchPlaces(query, 8),
+    ]);
+    const tripMatches = tripSearch.trips;
 
     const candidates = [
       ...buildTripCandidates(tripMatches),

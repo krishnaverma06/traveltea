@@ -8,6 +8,7 @@ import {
   deleteSavedTrip,
   checkTripSaved,
   semanticSearchTrips,
+  saveItineraryFromChat,
   updateTimelineRestaurants,
   markTripUpcoming,
 } from "../controllers/savedTripController.js";
@@ -28,6 +29,9 @@ router.get("/check", checkTripSaved);
 
 // Semantic search across saved trips (must be before /:id)
 router.get("/search", semanticSearchTrips);
+
+// Save an itinerary the agent generated in chat (must be before /:id)
+router.post("/from-itinerary", saveItineraryFromChat);
 
 // Get a specific saved trip
 router.get("/:id", getSavedTrip);
