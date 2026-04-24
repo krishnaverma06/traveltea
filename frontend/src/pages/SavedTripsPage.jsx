@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Search,
   Heart,
+  X,
 } from "lucide-react";
 
 const SavedTripsPage = () => {
@@ -26,41 +27,67 @@ const SavedTripsPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredTrips, setFilteredTrips] = useState([]);
   const [deletingId, setDeletingId] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     fetchSavedTrips();
   }, []);
 
+  // Search.
+  //
+  // `cancelled` is the fix for the bug where clearing the search box left the
+  // page showing "0 saved trips": clearTimeout only stops a request that
+  // hasn't been sent yet. A request already in flight still resolved
+  // afterwards and overwrote the full list with its own (often empty) results.
+  // Every exit path from this effect now marks itself cancelled, so a late
+  // response from a superseded query can no longer write to state.
   useEffect(() => {
+    let cancelled = false;
+
     if (!searchTerm.trim()) {
       setFilteredTrips(savedTrips);
-      return;
+      setIsSearching(false);
+      return () => {
+        cancelled = true;
+      };
     }
 
+    setIsSearching(true);
     const timer = setTimeout(async () => {
+      const term = searchTerm.trim();
       try {
         const token = getToken();
         if (!token) return;
-        
-        const response = await apiSearchSavedTrips(searchTerm.trim(), token);
-        if (response && response.savedTrips) {
-          setFilteredTrips(response.savedTrips);
-        }
-      } catch (err) {
-        console.error("Semantic search failed, falling back to local search", err);
-        // Fallback to robust local search
-        const term = searchTerm.toLowerCase();
-        const filtered = savedTrips.filter(
-          (trip) =>
-            (trip.title || "").toLowerCase().includes(term) ||
-            (trip.description || "").toLowerCase().includes(term) ||
-            (trip.tags || []).some((tag) => typeof tag === 'string' && tag.toLowerCase().includes(term))
-        );
-        setFilteredTrips(filtered);
-      }
-    }, 400); // 400ms debounce
 
-    return () => clearTimeout(timer);
+        const response = await apiSearchSavedTrips(term, token);
+        if (cancelled) return;
+        // An empty result set is a real answer ("nothing matched"), so it must
+        // be applied — but only when the response actually carries the array.
+        setFilteredTrips(Array.isArray(response?.savedTrips) ? response.savedTrips : []);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Trip search failed, falling back to local filtering", err);
+        const lower = term.toLowerCase();
+        setFilteredTrips(
+          savedTrips.filter(
+            (trip) =>
+              (trip.title || "").toLowerCase().includes(lower) ||
+              (trip.description || "").toLowerCase().includes(lower) ||
+              (trip.cities || []).some((c) => (c?.name || "").toLowerCase().includes(lower)) ||
+              (trip.tags || []).some(
+                (tag) => typeof tag === "string" && tag.toLowerCase().includes(lower),
+              ),
+          ),
+        );
+      } finally {
+        if (!cancelled) setIsSearching(false);
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [searchTerm, savedTrips]);
 
   const fetchSavedTrips = async () => {
@@ -249,12 +276,34 @@ const SavedTripsPage = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
-              placeholder="Search your trips..."
+              placeholder="Search by name, place, or vibe..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/50 backdrop-blur-sm"
+              className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/50 backdrop-blur-sm"
             />
+            {isSearching ? (
+              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 animate-spin" />
+            ) : (
+              searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  aria-label="Clear search"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )
+            )}
           </div>
+          {searchTerm && !isSearching && (
+            <p className="mt-2 text-sm text-gray-500">
+              {filteredTrips.length === 0
+                ? "No matches."
+                : `${filteredTrips.length} match${filteredTrips.length === 1 ? "" : "es"}`}{" "}
+              for "{searchTerm}"
+            </p>
+          )}
         </div>
 
         {/* Trips Grid */}

@@ -21,9 +21,12 @@ import OnboardingPage from "./pages/OnboardingPage"
 import Home from "./pages/Home"
 import ItineraryPage from "./pages/ItinearyPage";
 import SavedTripsPage from "./pages/SavedTripsPage";
+import TransactionsPage from "./pages/TransactionsPage";
 import UpcomingTripsPage from "./pages/UpcomingTripsPage";
 import TripsPage from "./pages/TripsPage";
 import ExplorePage from "./pages/ExplorePage";
+import FlightsPage from "./pages/FlightsPage";
+import HotelsPage from "./pages/HotelsPage";
 import ProfilePage from "./pages/ProfilePage";
 import FloatingAssistant from "./components/FloatingAssistant";
 
@@ -45,6 +48,15 @@ const ProtectedRoute = ({
   }
 
   return children;
+};
+
+/**
+ * Unmatched routes send the visitor somewhere real rather than a blank
+ * screen: signed-in users to the planner, everyone else to the landing page.
+ */
+const NotFound = () => {
+  const token = localStorage.getItem("traveltea_token");
+  return <Navigate to={token ? "/plan" : "/"} replace />;
 };
 
 const PublicRoute = ({ children }) => {
@@ -107,6 +119,14 @@ const AppContent = () => {
           } 
         />
         <Route
+          path="/transactions"
+          element={
+            <ProtectedRoute>
+              <TransactionsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/saved-trips"
           element={
             <ProtectedRoute>
@@ -139,6 +159,22 @@ const AppContent = () => {
           }
         />
         <Route
+          path="/flights"
+          element={
+            <ProtectedRoute>
+              <FlightsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/hotels"
+          element={
+            <ProtectedRoute>
+              <HotelsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/profile"
           element={
             <ProtectedRoute>
@@ -146,15 +182,7 @@ const AppContent = () => {
             </ProtectedRoute>
           }
         />
-        {/* <Route 
-          path="/plan/details" 
-          element={
-            <ProtectedRoute condition={tripData?.selectedTrip}>
-              <TripDetailsPage />
-            </ProtectedRoute>
-          } 
-        /> */}
-         <Route
+        <Route
           path="/home"
           element={
             <ProtectedRoute>
@@ -205,6 +233,13 @@ const AppContent = () => {
           }
         />
 
+        {/*
+          Catch-all. Without this, any unmatched URL (a typo, a stale
+          bookmark) rendered a
+          completely blank page with only a react-router
+          "No routes matched location" warning in the console.
+        */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </Router>
   );

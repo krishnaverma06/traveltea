@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
+import { getTripStats } from "@/lib/tripStats";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import TransactionRow from "@/components/TransactionRow";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -10,6 +12,7 @@ import {
   apiUpdateProfile,
   apiUpdatePreferences,
   getToken,
+  apiListTransactions,
 } from "@/lib/api";
 import { toast } from "react-toastify";
 import {
@@ -20,7 +23,12 @@ import {
   TrendingUp,
   Loader2,
   AlertTriangle,
+  Receipt,
+  ArrowRight,
 } from "lucide-react";
+
+/** How many payments the Profile summary shows before linking to the full page. */
+const RECENT_TRANSACTIONS = 3;
 
 const BUDGET_OPTIONS = [
   { value: "budget", label: "Budget" },
@@ -64,6 +72,8 @@ const ProfilePage = () => {
   const { user, updateUser } = useAuth();
 
   const [savedTrips, setSavedTrips] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(true);
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
 
   const [name, setName] = useState(user?.name || "");
@@ -108,30 +118,21 @@ const ProfilePage = () => {
       .finally(() => setIsLoadingTrips(false));
   }, []);
 
-  const getTripEndDate = (trip) => {
-    const start = new Date(trip.startDate);
-    const end = new Date(start);
-    end.setDate(end.getDate() + (trip.totalDays || 0));
-    return end;
-  };
+  // Payment history — same shape as the saved-trips fetch above.
+  useEffect(() => {
+    const token = getToken();
+    if (!token) {
+      setIsLoadingTransactions(false);
+      return;
+    }
+    apiListTransactions(token, { limit: 50 })
+      .then((res) => setTransactions(res.transactions || []))
+      .catch(() => setTransactions([]))
+      .finally(() => setIsLoadingTransactions(false));
+  }, []);
 
-  const now = new Date();
-  const completedTrips = savedTrips.filter((t) => getTripEndDate(t) < now);
-  const upcomingTrips = savedTrips.filter((t) => new Date(t.startDate) >= now);
-
-  const totalTrips = savedTrips.length;
-  const daysTraveled = completedTrips.reduce(
-    (sum, t) => sum + (t.totalDays || 0),
-    0
-  );
-  const citiesVisited = new Set(
-    completedTrips.flatMap((t) => t.cities?.map((c) => c.name) || [])
-  ).size;
-  const countriesVisited = new Set(
-    completedTrips.flatMap(
-      (t) => t.cities?.map((c) => c.country).filter(Boolean) || []
-    )
-  ).size;
+  const { completedTrips, upcomingTrips, totalTrips, daysTraveled, citiesVisited, countriesVisited } =
+    getTripStats(savedTrips);
 
   const memberSince = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString("en-US", {
@@ -276,6 +277,87 @@ const ProfilePage = () => {
               </div>
             </>
           )}
+        </section>
+
+
+        {/* Payments — summary only. The full list lives on /transactions:
+            it only ever grows, and rendering all of it here pushed App
+            Settings and Personal Information off the bottom of the page. */}
+        <section>
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <h2 className="text-xl font-bold text-gray-900">Payments</h2>
+            {transactions.length > 0 && (
+              <Button
+                onClick={() => navigate("/transactions")}
+                variant="outline"
+                size="sm"
+                className="normal-case tracking-normal text-gray-700"
+              >
+                <Receipt className="w-4 h-4 mr-2" />
+                View all
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            )}
+          </div>
+
+          <Card className="p-6 bg-white border border-gray-200">
+            {isLoadingTransactions ? (
+              <div className="flex justify-center py-6">
+                <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+              </div>
+            ) : transactions.length === 0 ? (
+              <div className="text-center py-8">
+                <Receipt className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-600">No payments yet.</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Book a flight or hotel and it will show up here.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-5 mb-5 border-b border-gray-100">
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{transactions.length}</p>
+                    <p className="text-xs text-gray-500">Transactions</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-green-600">
+                      {transactions.filter((t) => t.status === "succeeded").length}
+                    </p>
+                    <p className="text-xs text-gray-500">Succeeded</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {transactions.find((t) => t.currency)?.currency || ""}{" "}
+                      {transactions
+                        .filter((t) => t.status === "succeeded")
+                        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
+                        .toFixed(2)}
+                    </p>
+                    <p className="text-xs text-gray-500">Total paid</p>
+                  </div>
+                </div>
+
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Most recent
+                </p>
+                <div className="divide-y divide-gray-100">
+                  {transactions.slice(0, RECENT_TRANSACTIONS).map((t) => (
+                    <TransactionRow key={t._id || t.transactionId} transaction={t} />
+                  ))}
+                </div>
+
+                {transactions.length > RECENT_TRANSACTIONS && (
+                  <button
+                    onClick={() => navigate("/transactions")}
+                    className="mt-4 w-full py-2.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                  >
+                    View all {transactions.length} payments
+                  </button>
+                )}
+              </>
+            )}
+          </Card>
         </section>
 
         {/* Personal Information */}
@@ -520,3 +602,5 @@ const ProfilePage = () => {
 };
 
 export default ProfilePage;
+
+/** "VISA ****4242" / "UPI name@bank" / "Netbanking — HDFC Bank" */

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { toMapLocations } from "../lib/coords";
 import { useNavigate } from "react-router-dom";
 import { useTrip } from "@/contexts/TripContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -71,20 +72,7 @@ const ItineraryPage = () => {
 
   // Same shape Chat.jsx builds for its Map component — every activity across
   // every day, with a valid lat/lon.
-  const mapLocations = (itinerary?.days || [])
-    .flatMap((day) => day.timeSlots || [])
-    .flatMap((slot) => slot.activities || [])
-    .filter(
-      (activity) =>
-        typeof activity.location?.lat === "number" &&
-        typeof activity.location?.lon === "number",
-    )
-    .map((activity) => ({
-      lat: activity.location.lat,
-      lon: activity.location.lon,
-      name: activity.name,
-      description: activity.category,
-    }));
+  const mapLocations = toMapLocations(itinerary?.days);
 
   console.log("📊 ItineraryPage - tripData:", tripData);
   console.log("📊 ItineraryPage - itinerary:", itinerary);

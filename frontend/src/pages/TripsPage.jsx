@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { getTripStats } from "@/lib/tripStats";
 import { useNavigate } from "react-router-dom";
-import { isAfter, startOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useTrip } from "@/contexts/TripContext";
@@ -91,20 +91,10 @@ const TripsPage = () => {
     }
   };
 
-  const today = startOfDay(new Date());
-  const upcomingTrips = savedTrips
-    .filter((t) => t.startDate && isAfter(new Date(t.startDate), today))
-    .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
-
-  const upcomingCount = upcomingTrips.length;
-  const citiesVisited = new Set(
-    savedTrips.flatMap((t) => t.cities?.map((c) => c.name) || [])
-  ).size;
-  const daysTraveled = savedTrips.reduce(
-    (sum, t) =>
-      sum + (t.totalDays || t.cities?.reduce((s, c) => s + c.days, 0) || 0),
-    0
-  );
+  // Shared with /profile and /plan so the same label can't show different
+  // numbers on different pages. "Visited" counts completed trips only.
+  const { upcomingTrips, upcomingCount, citiesVisited, daysTraveled } =
+    getTripStats(savedTrips);
 
   const tripsToShow = activeTab === "upcoming" ? upcomingTrips : savedTrips;
 

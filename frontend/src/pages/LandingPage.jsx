@@ -163,7 +163,7 @@ export default function LandingPage() {
                       </div>
                       
                       <div className="text-center space-y-4">
-                        <h3 className="text-2xl font-bold text-white group-hover:text-opacity-90 transition-colors duration-300">
+                        <h3 className="text-2xl font-bold text-white group-hover:text-white/90 transition-colors duration-300">
                           {card.title}
                         </h3>
                         <p className="text-slate-300 leading-relaxed group-hover:text-slate-200 transition-colors duration-300">

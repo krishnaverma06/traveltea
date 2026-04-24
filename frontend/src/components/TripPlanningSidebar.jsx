@@ -77,7 +77,11 @@ const TripPlanningSidebar = ({ currentStep, onStepClick, tripData }) => {
       case "preferences":
         return tripData?.people && tripData?.travelType ? "completed" : "pending";
       case "results":
-        return tripData?.selectedTrip ? "completed" : "pending";
+        // Keyed off the generated itinerary, not `selectedTrip`. The latter
+        // belonged to an abandoned "pick a pre-priced package" flow and is
+        // never assigned anywhere, so this step could never show as completed
+        // even after a full itinerary had been built.
+        return tripData?.generatedItinerary ? "completed" : "pending";
       default:
         return "pending";
     }
@@ -171,7 +175,7 @@ const TripPlanningSidebar = ({ currentStep, onStepClick, tripData }) => {
           })}
         </div>
 
-        {tripData && (tripData.cities?.length > 0 || tripData.startDate || (tripData.people && tripData.people > 0) || (tripData.budget && tripData.budget.total > 0) || tripData.selectedTrip) ? (
+        {tripData && (tripData.cities?.length > 0 || tripData.startDate || (tripData.people && tripData.people > 0) || (tripData.budget && tripData.budget.total > 0) || tripData.generatedItinerary) ? (
           <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 shadow-sm">
             <div className="p-4">
               <div className="flex items-center gap-2 mb-3">

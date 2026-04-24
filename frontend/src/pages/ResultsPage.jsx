@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -26,6 +26,13 @@ const ResultsPage = () => {
   const [generatedItinerary, setGeneratedItinerary] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // React.StrictMode (main.jsx) intentionally double-invokes effects in dev,
+  // so the "only run once on mount" comment below was not true: every visit
+  // fired TWO full itinerary generations in parallel — double the Gemini and
+  // Google Places spend for identical output. A ref survives the remount that
+  // state would not, so the second invocation is a no-op.
+  const generationStartedRef = useRef(false);
 
   // Generate AI itinerary when component mounts with complete data
   useEffect(() => {
@@ -123,8 +130,14 @@ const ResultsPage = () => {
       }
     };
 
+    if (generationStartedRef.current) {
+      console.log("⏭️  Itinerary generation already in flight — skipping duplicate run");
+      return;
+    }
+    generationStartedRef.current = true;
+
     generateItinerary();
-  }, []); // Only run once on mount
+  }, []); // Guarded by generationStartedRef — safe under StrictMode double-invoke
 
    const handleViewItinerary = () => {
     console.log("🔵 VIEW ITINERARY BUTTON CLICKED - Navigating to /itinerary");
