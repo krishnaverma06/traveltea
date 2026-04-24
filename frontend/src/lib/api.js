@@ -125,6 +125,22 @@ export async function apiSearchSavedTrips(query, token) {
   });
 }
 
+/**
+ * Save an itinerary the agent generated in chat.
+ *
+ * A dedicated endpoint rather than POST /api/saved-trips because the chat
+ * itinerary shape doesn't match the SavedTrip schema — the server does the
+ * mapping (and the embedding + vector ingestion) so the client doesn't have to
+ * reconstruct budget splits it never had.
+ */
+export async function apiSaveItineraryFromChat(payload, token) {
+  return request("/api/saved-trips/from-itinerary", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function apiGetSavedTrip(id, token) {
   return request(`/api/saved-trips/${id}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -190,5 +206,67 @@ export async function apiMarkTripAsUpcoming(id, payload, token) {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
+  });
+}
+// ---------------------------------------------------------------------------
+// Flights & Hotels search + booking
+// ---------------------------------------------------------------------------
+
+export async function apiSearchFlights(params, token) {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/api/travel-search/flights?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiSearchHotels(params, token) {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/api/travel-search/hotels?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiSearchAirports(q, token, signal) {
+  const qs = new URLSearchParams({ q }).toString();
+  return request(`/api/travel-search/airports?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  });
+}
+
+export async function apiCreateBooking(payload, token) {
+  return request("/api/bookings", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Submit a (simulated) payment.
+ *
+ * NOTE: a declined payment comes back as HTTP 200 with `status:
+ * 'payment_failed'`, not a 4xx — callers must branch on the body, never on the
+ * status code.
+ */
+export async function apiPayBooking(bookingId, payment, token) {
+  return request(`/api/bookings/${bookingId}/pay`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payment),
+  });
+}
+
+export async function apiListBookings(token, params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return request(qs ? `/api/bookings?${qs}` : "/api/bookings", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiListTransactions(token, params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return request(qs ? `/api/transactions?${qs}` : "/api/transactions", {
+    headers: { Authorization: `Bearer ${token}` },
   });
 }

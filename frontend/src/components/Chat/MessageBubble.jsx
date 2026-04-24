@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
-import { User, Bot, Calendar } from "lucide-react";
+import { User, Bot, Calendar, Bookmark, Pencil, Check, Loader2 } from "lucide-react";
+import { BookingOptionsCard } from "./BookingOptionsCard";
+import { BookingReceipt } from "./BookingReceipt";
+import { TripStepCard } from "./TripStepCard";
 
 const REVEAL_TICKS = 40;
 const REVEAL_INTERVAL_MS = 20;
@@ -49,6 +52,18 @@ export function MessageBubble({
   timestamp,
   itinerary,
   onViewItinerary,
+  pendingBooking,
+  bookingResult,
+  pendingTrip,
+  isLatest,
+  onSelectOption,
+  onConfirm,
+  onDecline,
+  onReply,
+  onSaveItinerary,
+  onEditItinerary,
+  savingItinerary,
+  itinerarySaved,
 }) {
   const isUser = role === "user";
   const [displayedContent, setDisplayedContent] = useState(
@@ -81,6 +96,28 @@ export function MessageBubble({
 
   const isRevealDone = displayedContent.length >= content.length;
   const hasItinerary = !isUser && !!itinerary && isRevealDone;
+  // Interactive booking buttons only make sense on the current outstanding
+  // confirmation — once superseded by a later message, an older card
+  // becomes inert rather than staying clickable indefinitely.
+  const hasBookingOptions =
+    !isUser &&
+    !!pendingBooking?.options?.length &&
+    !!isLatest &&
+    isRevealDone;
+  // A receipt/decline notice never goes stale, unlike the options card —
+  // safe to show permanently on whichever message produced it.
+  const hasBookingResult = !isUser && !!bookingResult && isRevealDone;
+  // Trip-planning controls are live only on the step the flow is actually
+  // paused on — same staleness rule as the booking options card above.
+  const hasTripStep = !isUser && !!pendingTrip && !!isLatest && isRevealDone;
+
+  // The receipt card already states the hotel, price, reference and
+  // transaction id, and the assistant's markdown says exactly the same thing
+  // — so a confirmed booking was rendering twice, once as text and again as
+  // the card directly beneath it. Suppress the prose bubble in that case and
+  // let the card speak. Only when there IS a card: with the card hidden (an
+  // older message, or a decline with no result) the text is the only record.
+  const suppressProse = !isUser && !!bookingResult && !bookingResult.declined;
 
   return (
     <motion.div
@@ -104,14 +141,14 @@ export function MessageBubble({
       <div
         className={`flex flex-col ${
           isUser ? "items-end" : "items-start"
-        } max-w-[70%]`}
+        } ${hasTripStep ? "max-w-[92%] w-[92%]" : "max-w-[70%]"}`}
       >
         <div
           className={`rounded-2xl px-4 py-2.5 ${
             isUser
               ? "bg-blue-500 text-white"
               : "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
-          }`}
+          } ${suppressProse ? "hidden" : ""}`}
         >
           {isUser ? (
             <p className="text-sm whitespace-pre-wrap break-words">
@@ -137,16 +174,70 @@ export function MessageBubble({
           })}
         </span>
 
-        {/* View Itinerary Button */}
-        {hasItinerary && onViewItinerary && (
-          <button
-            onClick={onViewItinerary}
-            className="mt-2 flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg text-sm font-medium"
-          >
-            <Calendar size={16} />
-            View Itinerary
-          </button>
+        {/* Itinerary actions: view, save, edit */}
+        {hasItinerary && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {onViewItinerary && (
+              <button
+                onClick={onViewItinerary}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg text-sm font-medium"
+              >
+                <Calendar size={16} />
+                View Itinerary
+              </button>
+            )}
+
+            {/* Save and Edit only make sense on the newest itinerary — an
+                older one in the scrollback has already been superseded. */}
+            {isLatest && onSaveItinerary && (
+              <button
+                onClick={onSaveItinerary}
+                disabled={savingItinerary || itinerarySaved}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  itinerarySaved
+                    ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 cursor-default"
+                    : "bg-white text-gray-800 border border-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:hover:bg-gray-600"
+                } disabled:opacity-70`}
+              >
+                {savingItinerary ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : itinerarySaved ? (
+                  <Check size={16} />
+                ) : (
+                  <Bookmark size={16} />
+                )}
+                {itinerarySaved ? "Saved" : savingItinerary ? "Saving…" : "Save trip"}
+              </button>
+            )}
+
+            {isLatest && onEditItinerary && (
+              <button
+                onClick={onEditItinerary}
+                disabled={savingItinerary}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white text-gray-800 border border-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:hover:bg-gray-600 transition-all disabled:opacity-70"
+              >
+                <Pencil size={16} />
+                Edit with AI
+              </button>
+            )}
+          </div>
         )}
+
+        {/* Flight/hotel option cards + confirmation buttons */}
+        {hasBookingOptions && (
+          <BookingOptionsCard
+            pendingBooking={pendingBooking}
+            onSelectOption={onSelectOption}
+            onConfirm={onConfirm}
+            onDecline={onDecline}
+          />
+        )}
+
+        {/* Booking receipt / decline notice */}
+        {hasBookingResult && <BookingReceipt bookingResult={bookingResult} />}
+
+        {/* Agent-driven trip planning: option buttons / inline payment */}
+        {hasTripStep && <TripStepCard pendingTrip={pendingTrip} onReply={onReply} />}
       </div>
     </motion.div>
   );

@@ -58,6 +58,12 @@ export function useSocket(conversationId) {
           conversationId: data.conversationId,
           itinerary: data.itinerary,
           updatedTrip: data.updatedTrip,
+          pendingBooking: data.pendingBooking,
+          bookingResult: data.bookingResult,
+          // Agent-driven trip planning: which step the flow is paused on,
+          // and the SavedTrip it created once it finishes.
+          pendingTrip: data.pendingTrip,
+          tripPlanResult: data.tripPlanResult,
         })
       );
     });

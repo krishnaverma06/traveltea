@@ -1,6 +1,13 @@
 import { useState } from "react";
 
-export function ItineraryOverlay({ itinerary, onClose, onActivityClick }) {
+/**
+ * `isDrawer` mirrors the chat column's own flag (Chat.jsx). This panel used to
+ * hardcode w-[35%], which is right beside a 65% map on the full page but
+ * collapses to ~200px inside the ~580px AI Assistant drawer — the itinerary
+ * rendered in a sliver with dead space beside it, text wrapping one word per
+ * line and the footer button overlapping its own label.
+ */
+export function ItineraryOverlay({ itinerary, onClose, onActivityClick, isDrawer = false }) {
   const [selectedDay, setSelectedDay] = useState(1);
 
   if (!itinerary) return null;
@@ -35,12 +42,17 @@ export function ItineraryOverlay({ itinerary, onClose, onActivityClick }) {
   };
 
   return (
-    <div className="w-[35%] flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div
+      className={`${isDrawer ? "w-full" : "w-[35%]"} flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-hidden`}
+    >
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 flex-shrink-0">
-        <div className="flex justify-between items-start">
-          <div>
-            <h2 className="text-2xl font-bold mb-2">
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 sm:p-6 flex-shrink-0">
+        <div className="flex justify-between items-start gap-3">
+          {/* min-w-0 lets the title actually shrink — without it a flex child
+              refuses to go below its content width and pushes the close
+              button off the panel. */}
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-bold mb-2 break-words">
               🗺️ {itinerary.tripMetadata.destination} Trip
             </h2>
 
@@ -61,7 +73,8 @@ export function ItineraryOverlay({ itinerary, onClose, onActivityClick }) {
 
           <button
             onClick={onClose}
-            className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
+            aria-label="Close itinerary"
+            className="text-white hover:bg-white/20 rounded-full p-2 transition-colors flex-shrink-0"
           >
             <svg
               className="w-6 h-6"
@@ -85,10 +98,14 @@ export function ItineraryOverlay({ itinerary, onClose, onActivityClick }) {
             <button
               key={day.dayNumber}
               onClick={() => setSelectedDay(day.dayNumber)}
+              // Slash opacity, not bg-opacity-*: Tailwind v4 removed the
+              // separate opacity utilities, so `bg-white bg-opacity-20` was
+              // rendering as SOLID white — white text on white, an unselected
+              // day tab that looked like an empty pill.
               className={`px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
                 selectedDay === day.dayNumber
                   ? "bg-white text-blue-600 font-semibold shadow-lg"
-                  : "bg-white bg-opacity-20 text-white hover:bg-opacity-30"
+                  : "bg-white/20 text-white hover:bg-white/30"
               }`}
             >
               Day {day.dayNumber}
@@ -98,11 +115,11 @@ export function ItineraryOverlay({ itinerary, onClose, onActivityClick }) {
       </div>
 
       {/* Day Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {currentDay && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-1">
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100 mb-1 break-words">
                 {currentDay.title}
               </h3>
 
@@ -134,15 +151,18 @@ export function ItineraryOverlay({ itinerary, onClose, onActivityClick }) {
                       </div>
                     </div>
 
-                    {/* Activities */}
-                    <div className="space-y-3 pl-11">
+                    {/* Activities. The 11-unit indent lines up under the time
+                        slot's emoji on the full page, but is most of the width
+                        in a narrow drawer — so it only applies once there's
+                        room for it. */}
+                    <div className={`space-y-3 ${isDrawer ? "pl-3 sm:pl-11" : "pl-11"}`}>
                       {slot.activities.map((activity, activityIndex) => (
                         <div
                           key={activity.id}
                           onClick={() =>
                             onActivityClick && onActivityClick(activity)
                           }
-                          className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group"
+                          className="bg-gray-50 dark:bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group"
                         >
                           <div className="flex items-start gap-3">
                             {activity.imageUrl ? (
@@ -158,14 +178,17 @@ export function ItineraryOverlay({ itinerary, onClose, onActivityClick }) {
                               </span>
                             )}
 
-                            <div className="flex-1">
+                            {/* min-w-0 is what stops a long activity name from
+                                forcing the card wider than the panel and
+                                producing a horizontal scrollbar. */}
+                            <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between gap-2">
-                                <h5 className="font-semibold text-gray-800 dark:text-gray-100 group-hover:text-blue-600 transition-colors">
+                                <h5 className="font-semibold text-gray-800 dark:text-gray-100 group-hover:text-blue-600 transition-colors break-words min-w-0">
                                   {activityIndex + 1}. {activity.name}
                                 </h5>
 
                                 {activity.rating && (
-                                  <span className="text-yellow-500 text-sm whitespace-nowrap">
+                                  <span className="text-yellow-500 text-sm whitespace-nowrap flex-shrink-0">
                                     ⭐ {activity.rating}/7
                                   </span>
                                 )}
@@ -209,14 +232,17 @@ export function ItineraryOverlay({ itinerary, onClose, onActivityClick }) {
 
       {/* Footer */}
       <div className="border-t border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900 flex-shrink-0">
-        <div className="flex justify-between items-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+        {/* Wraps instead of squeezing: side by side when there's room, stacked
+            when there isn't. Unwrapped, the hint text collapsed to one word
+            per line and the button sat on top of it. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-gray-600 dark:text-gray-400 min-w-0">
             ✨ Customize this itinerary by chatting with me!
           </p>
 
           <button
             onClick={onClose}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium whitespace-nowrap flex-shrink-0"
           >
             Back to Chat
           </button>

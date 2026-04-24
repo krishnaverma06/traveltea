@@ -1,5 +1,20 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+
+/**
+ * totalDays is a pure function of the per-city day counts, but it was also
+ * stored — so the two could drift apart. Observed live: cities [Pune 3, Goa 3]
+ * with a stored totalDays of 3, which made the sidebar show "Duration: 3 days"
+ * and an End Date three days too early while the itinerary itself correctly
+ * showed 6. Deriving it on every read makes that drift unrepresentable and
+ * self-heals state already persisted in localStorage.
+ */
+const withDerivedTotalDays = (data) => {
+  if (!data || !Array.isArray(data.cities) || data.cities.length === 0) return data;
+  const derived = data.cities.reduce((sum, c) => sum + (Number(c?.days) || 0), 0);
+  return derived === data.totalDays ? data : { ...data, totalDays: derived };
+};
+
 const TripContext = createContext();
 
 export const useTrip = () => {
@@ -15,7 +30,7 @@ export const TripProvider = ({ children }) => {
     try {
       const saved = localStorage.getItem('tripData');
       if (saved) {
-        return JSON.parse(saved);
+        return withDerivedTotalDays(JSON.parse(saved));
       }
     } catch (e) {
       console.error('Failed to parse tripData from localStorage', e);
@@ -45,12 +60,12 @@ export const TripProvider = ({ children }) => {
         setTripData(prev => {
           // In some cases we might only have generatedItinerary or similar in state
           // For now, if an update comes in, we assume it's for the currently active trip
-          return {
+          return withDerivedTotalDays({
             ...prev,
             ...updatedTrip,
             generatedItinerary: updatedTrip.generatedItinerary || prev.generatedItinerary,
             timeline: updatedTrip.timeline || prev.timeline
-          };
+          });
         });
       }
     };
@@ -71,10 +86,15 @@ export const TripProvider = ({ children }) => {
         ('travelType' in newData);
         
       if (isModifyingParameters && !('generatedItinerary' in newData)) {
-        return { ...prev, ...newData, generatedItinerary: null, itineraryMarkdown: null };
+        return withDerivedTotalDays({
+          ...prev,
+          ...newData,
+          generatedItinerary: null,
+          itineraryMarkdown: null,
+        });
       }
-      
-      return { ...prev, ...newData };
+
+      return withDerivedTotalDays({ ...prev, ...newData });
     });
   };
 
