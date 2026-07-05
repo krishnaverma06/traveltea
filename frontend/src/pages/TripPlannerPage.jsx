@@ -1,14 +1,28 @@
-import React, { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card" 
-import { Input } from "@/components/ui/input"
-import { Plus, CalendarIcon, MapPin, Plane, Sparkles, GripVertical, Clock, X, Edit2, Check } from "lucide-react"
-import { format } from "date-fns"
-import { cn } from "@/lib/utils"
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import TripPlanningSidebar from "@/components/TripPlanningSidebar";
+import { useTrip } from "@/contexts/TripContext";
+import {
+  Plus,
+  CalendarIcon,
+  MapPin,
+  Plane,
+  Sparkles,
+  GripVertical,
+  Clock,
+  X,
+  Edit2,
+  Check,
+} from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 const DatePicker = ({ selected, onSelect }) => {
-  const [isOpen, setIsOpen] = useState(false)
-  const today = new Date()
+  const [isOpen, setIsOpen] = useState(false);
+  const today = new Date();
   
   return (
     <div className="relative">
@@ -44,8 +58,8 @@ const DatePicker = ({ selected, onSelect }) => {
               min={format(today, "yyyy-MM-dd")}
               onChange={(e) => {
                 if (e.target.value) {
-                  onSelect(new Date(e.target.value))
-                  setIsOpen(false)
+                  onSelect(new Date(e.target.value));
+                  setIsOpen(false);
                 }
               }}
               className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -54,11 +68,11 @@ const DatePicker = ({ selected, onSelect }) => {
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
 const DashboardNav = () => {
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchQuery, setSearchQuery] = useState("");
   
   return (
     <nav className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
@@ -107,20 +121,20 @@ const DashboardNav = () => {
         </div>
       </div>
     </nav>
-  )
-}
+  );
+};
 
 const QuickStats = () => {
   const stats = [
     { label: "Upcoming Trips", value: "2", icon: CalendarIcon },
     { label: "Cities Visited", value: "12", icon: MapPin },
-    { label: "Days Traveled", value: "45", icon: Plane }
-  ]
+    { label: "Days Traveled", value: "45", icon: Plane },
+  ];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
       {stats.map((stat, index) => {
-        const Icon = stat.icon
+        const Icon = stat.icon;
         return (
           <Card
             key={index}
@@ -136,32 +150,32 @@ const QuickStats = () => {
               </div>
             </div>
           </Card>
-        )
+        );
       })}
     </div>
-  )
-}
+  );
+};
 
 const CityCard = ({ city, index, onRemove, onUpdate }) => {
-  const [isEditing, setIsEditing] = useState(false)
-  const [editName, setEditName] = useState(city.name)
-  const [editDays, setEditDays] = useState(city.days.toString())
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(city.name);
+  const [editDays, setEditDays] = useState(city.days.toString());
 
   const handleSave = () => {
     if (editName.trim()) {
       onUpdate(city.id, {
         name: editName.trim(),
         days: Number.parseInt(editDays) || 1,
-      })
-      setIsEditing(false)
+      });
+      setIsEditing(false);
     }
-  }
+  };
 
   const handleCancel = () => {
-    setEditName(city.name)
-    setEditDays(city.days.toString())
-    setIsEditing(false)
-  }
+    setEditName(city.name);
+    setEditDays(city.days.toString());
+    setIsEditing(false);
+  };
 
   return (
     <Card className="transition-all duration-300 hover:shadow-xl hover:bg-white/90 hover:backdrop-blur-sm hover:-translate-y-1 bg-white border border-gray-200 hover:border-blue-300">
@@ -182,8 +196,8 @@ const CityCard = ({ city, index, onRemove, onUpdate }) => {
               className="h-10 flex-1 bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
               autoFocus
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleSave()
-                if (e.key === "Escape") handleCancel()
+                if (e.key === "Enter") handleSave();
+                if (e.key === "Escape") handleCancel();
               }}
             />
             <Input
@@ -194,8 +208,8 @@ const CityCard = ({ city, index, onRemove, onUpdate }) => {
               onChange={(e) => setEditDays(e.target.value)}
               className="h-10 w-24 bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleSave()
-                if (e.key === "Escape") handleCancel()
+                if (e.key === "Enter") handleSave();
+                if (e.key === "Escape") handleCancel();
               }}
             />
             <Button size="sm" onClick={handleSave} className="h-10 gap-2 bg-blue-500 hover:bg-blue-600 text-white border-0">
@@ -243,16 +257,16 @@ const CityCard = ({ city, index, onRemove, onUpdate }) => {
         )}
       </div>
     </Card>
-  )
-}
+  );
+};
 
-const TripBuilder = () => {
-  const [startDate, setStartDate] = useState()
-  const [cities, setCities] = useState([])
-  const [newCityName, setNewCityName] = useState("")
-  const [newCityDays, setNewCityDays] = useState("3")
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [draggedIndex, setDraggedIndex] = useState(null)
+const TripBuilder = ({ onStartPlanning }) => {
+  const [startDate, setStartDate] = useState();
+  const [cities, setCities] = useState([]);
+  const [newCityName, setNewCityName] = useState("");
+  const [newCityDays, setNewCityDays] = useState("3");
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState(null);
 
   const addCity = () => {
     if (newCityName.trim() && newCityDays) {
@@ -260,51 +274,61 @@ const TripBuilder = () => {
         id: Date.now().toString(),
         name: newCityName.trim(),
         days: Number.parseInt(newCityDays) || 1,
-      }
-      setCities([...cities, newCity])
-      setNewCityName("")
-      setNewCityDays("3")
-      setShowAddForm(false)
+      };
+      setCities([...cities, newCity]);
+      setNewCityName("");
+      setNewCityDays("3");
+      setShowAddForm(false);
     }
-  }
+  };
 
   const removeCity = (id) => {
-    setCities(cities.filter((city) => city.id !== id))
-  }
+    setCities(cities.filter((city) => city.id !== id));
+  };
 
   const updateCity = (id, updates) => {
-    setCities(cities.map((city) => (city.id === id ? { ...city, ...updates } : city)))
-  }
+    setCities(cities.map((city) => (city.id === id ? { ...city, ...updates } : city)));
+  };
 
   const handleDragStart = (e, index) => {
     setDraggedIndex(index)
-    e.dataTransfer.effectAllowed = 'move'
-  }
+    e.dataTransfer.effectAllowed = "move";
+  };
 
   const handleDragOver = (e) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
 
   const handleDrop = (e, dropIndex) => {
-    e.preventDefault()
-    if (draggedIndex === null || draggedIndex === dropIndex) return
-    
-    const newCities = [...cities]
-    const draggedCity = newCities[draggedIndex]
-    newCities.splice(draggedIndex, 1)
-    newCities.splice(dropIndex, 0, draggedCity)
-    
-    setCities(newCities)
-    setDraggedIndex(null)
-  }
+        e.preventDefault();
+    if (draggedIndex === null || draggedIndex === dropIndex) return;
 
-  const totalDays = cities.reduce((sum, city) => sum + city.days, 0)
+    const newCities = [...cities];
+    const draggedCity = newCities[draggedIndex];
+    newCities.splice(draggedIndex, 1);
+    newCities.splice(dropIndex, 0, draggedCity);
+
+    setCities(newCities);
+    setDraggedIndex(null);
+  };
+
+  const totalDays = cities.reduce((sum, city) => sum + city.days, 0);
 
   const generateItinerary = () => {
-    console.log("Generating itinerary...", { startDate, cities })
-    alert("Itinerary generation would happen here!")
-  }
+        if (startDate && cities.length > 0) {
+      const tripData = {
+        startDate,
+        cities,
+        totalDays: cities.reduce((sum, city) => sum + city.days, 0)
+      };
+      console.log("Starting planning with data:", tripData);
+      onStartPlanning(tripData);
+    } else {
+      console.log("Cannot proceed: missing startDate or cities", { startDate, cities });
+    }
+  };
+  
 
   return (
     <section className="py-8">
@@ -400,9 +424,9 @@ const TripBuilder = () => {
                         <Button
                           variant="outline"
                           onClick={() => {
-                            setShowAddForm(false)
-                            setNewCityName("")
-                            setNewCityDays("3")
+                            setShowAddForm(false);
+                            setNewCityName("");
+                            setNewCityDays("3");
                           }}
                           className="h-12 px-4 border-gray-300 text-gray-600 hover:bg-white/80 hover:backdrop-blur-sm transition-all duration-200"
                         >
@@ -472,7 +496,7 @@ const TripBuilder = () => {
                     disabled={!startDate || cities.length === 0}
                   >
                     <Plane className="h-5 w-5" />
-                    <span>Build My Trip</span>
+                    <span>Continue to Budget Planning</span>
                   </Button>
                 </>
               ) : (
@@ -495,17 +519,56 @@ const TripBuilder = () => {
         </div>
       </div>
     </section>
-  )
-}
+  );
+};
 
 export default function TripPlannerPage() {
+const navigate = useNavigate();
+  const { tripData, updateTripData } = useTrip();
+
+  const handleStartPlanning = (data) => {
+    // console.log("navigate budget", data);
+    updateTripData(data);
+    navigate('/plan/budget');
+  };
+
+  const handleStepClick = (step) => {
+    switch (step) {
+      case "budget":
+        if (tripData?.cities?.length > 0 && tripData?.startDate) {
+          navigate('/plan/budget');
+        }
+        break;
+      case "preferences":
+        if (tripData?.budget) {
+          navigate('/plan/preferences');
+        }
+        break;
+      case "results":
+        if (tripData?.people && tripData?.travelType) {
+          navigate('/plan/results');
+        }
+        break;
+      default:
+        break;
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <DashboardNav />
-      <main className="container mx-auto px-4 py-8 max-w-6xl">
-        <QuickStats />
-        <TripBuilder />
-      </main>
+    <div className="flex min-h-screen bg-gray-50">
+      <TripPlanningSidebar 
+        currentStep="destinations" 
+        onStepClick={handleStepClick}
+        tripData={tripData}
+      />
+      
+      <div className="flex-1">
+        <DashboardNav />
+        <main className="container mx-auto px-4 py-8 max-w-6xl">
+          <QuickStats />
+          <TripBuilder onStartPlanning={handleStartPlanning} />
+        </main>
+      </div>
     </div>
-  )
-}
+  );
+};
