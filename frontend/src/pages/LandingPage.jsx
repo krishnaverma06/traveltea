@@ -78,7 +78,7 @@ export default function LandingPage() {
                   key={idx}
                   src={img.src}
                   alt={img.alt}
-                  className="rounded-xl border object-cover aspect-[4/3] shadow-lg hover:scale-105 transition-transform duration-300 cursor-pointer"
+                  className="rounded-xl border object-cover aspect-4/3 shadow-lg hover:scale-105 transition-transform duration-300 cursor-pointer"
                 />
               ))}
             </motion.div>
