@@ -3,9 +3,21 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { connectDB } from './config/database.js';
+import chatRoutes from './routes/chat.js';
+import { setSocketIO } from './controllers/chatController.js';
 
-dotenv.config();
+// Load environment variables
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+// Debug: Verify env vars are loaded
+console.log('🔑 Environment check:');
+console.log('  - GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ Loaded' : '❌ Missing');
+console.log('  - OPENTRIPMAP_API_KEY:', process.env.OPENTRIPMAP_API_KEY ? '✅ Loaded' : '❌ Missing');
 
 const app = express();
 const httpServer = createServer(app);
@@ -34,15 +46,33 @@ app.get('/api', (req, res) => {
   res.json({ message: 'TravelTea API is running' });
 });
 
+// Chat routes
+app.use('/api/chat', chatRoutes);
+
+// Set Socket.io instance for chat controller
+setSocketIO(io);
+
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
 
-  socket.on('disconnect', () => {
-    console.log(`Client disconnected: ${socket.id}`);
+  socket.on('join:conversation', (conversationId: string) => {
+      socket.join(conversationId);
+      console.log(`📝 Socket ${socket.id} joined conversation: ${conversationId}`);
   });
 
-  // Will add chat handlers in Phase 1
+  // Leave conversation room
+  socket.on('leave:conversation', (conversationId: string) => {
+    socket.leave(conversationId);
+    console.log(`👋 Socket ${socket.id} left conversation: ${conversationId}`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`❌ Client disconnected: ${socket.id}`);
+  });
+
+  
 });
 
 // Error handling middleware

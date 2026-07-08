@@ -12,6 +12,7 @@ import BudgetPage from "./pages/BudgetPage.jsx";
 import PreferencesPage from "./pages/PreferencesPage.jsx";
 import ResultsPage from "./pages/ResultsPage.jsx";
 import TripDetailsPage from "./pages/TripDetailsPage.jsx";
+import { Chat } from "./pages/Chat";
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/plan/preferences" element = {<PreferencesPage />}/>
           <Route path="/plan/results" element = {<ResultsPage/>}/>
           <Route path="/plan/details" element = {<TripDetailsPage/>}/>
+          <Route path ="/plan/chat" element = {<Chat/>}/>
         </Routes>
       </Router>
     </TripProvider>
