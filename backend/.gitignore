@@ -12,6 +12,8 @@ build/
 .env
 .env.local
 .env.*.local
+.postman/
+postman/
 
 # Logs
 logs/

@@ -145,8 +145,8 @@ const BudgetPage = () => {
               </div>
             </div>
             <Slider
-              value={budget.total}
-              onChange={(value) => updateBudget("total", value)}
+              value={[budget.total]}
+              onValueChange={(value) => updateBudget("total", value)}
               min={1000}
               max={50000}
               step={500}
@@ -192,8 +192,8 @@ const BudgetPage = () => {
                   </div>
                   
                   <Slider
-                    value={budget[category.id]}
-                    onChange={(value) => updateBudget(category.id, value)}
+                    value={[budget[category.id]]}
+                    onValueChange={(value) => updateBudget(category.id, value)}
                     min={0}
                     max={100}
                     step={5}
