@@ -13,6 +13,8 @@ import PreferencesPage from "./pages/PreferencesPage.jsx";
 import ResultsPage from "./pages/ResultsPage.jsx";
 import TripDetailsPage from "./pages/TripDetailsPage.jsx";
 import { Chat } from "./pages/Chat";
+import LoginPage from "./pages/LoginPage";
+import SignupPage from "./pages/SignupPage";
 
 function App() {
   return (
@@ -26,6 +28,8 @@ function App() {
           <Route path="/plan/results" element = {<ResultsPage/>}/>
           <Route path="/plan/details" element = {<TripDetailsPage/>}/>
           <Route path ="/plan/chat" element = {<Chat/>}/>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
         </Routes>
       </Router>
     </TripProvider>
