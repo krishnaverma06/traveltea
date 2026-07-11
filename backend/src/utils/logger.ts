@@ -3,7 +3,7 @@ type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 class Logger {
   private prefix: string;
 
-  constructor(prefix: string = 'TripWhat') {
+  constructor(prefix: string = 'TravelTea') {
     this.prefix = prefix;
   }
 
