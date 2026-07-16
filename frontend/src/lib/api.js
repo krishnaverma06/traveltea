@@ -41,15 +41,15 @@ export async function apiMe(token) {
 }
 
 export function saveToken(token) {
-  localStorage.setItem("tripwhat_token", token);
+  localStorage.setItem("traveltea_token", token);
 }
 
 export function getToken() {
-  return localStorage.getItem("tripwhat_token");
+  return localStorage.getItem("traveltea_token");
 }
 
 export function clearToken() {
-  localStorage.removeItem("tripwhat_token");
+  localStorage.removeItem("traveltea_token");
 }
 
 

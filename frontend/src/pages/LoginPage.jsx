@@ -56,6 +56,8 @@ export default function LoginPage() {
         password: formData.password,
       });
       saveToken(token);
+      console.log("Saved token:", localStorage.getItem("token"));
+      alert("Login successful!");
       navigate("/plan");
     } catch (err) {
       setError(err.message);
