@@ -39,7 +39,7 @@ const ProtectedRoute = ({
 };
 
 const PublicRoute = ({ children }) => {
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("traveltea_token");
 
   if (token) {
     return <Navigate to="/plan" replace />;
