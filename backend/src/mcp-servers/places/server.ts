@@ -18,7 +18,7 @@ class PlacesServer {
   constructor() {
     this.server = new Server(
       {
-        name: "tripwhat-places-server",
+        name: "traveltea-places-server",
         version: "1.0.0",
       },
       {

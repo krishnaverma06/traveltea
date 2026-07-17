@@ -7,11 +7,14 @@ import {
   BaseMessage,
 } from "@langchain/core/messages";
 import { openTripMapAPI } from "../mcp-servers/places/api.js";
-import { itineraryBuilder } from '../services/itineraryBuilder.js';
+import { itineraryBuilder } from "../services/itineraryBuilder.js";
+import { intentDetector } from "./intent-detector.js";
+import { toolRegistry } from "./tool-registry.js";
 import { TRAVEL_AGENT_SYSTEM_PROMPT } from "./prompts.js";
 import type { AgentConfig } from "./types.js";
 import type { Destination } from "../mcp-servers/places/types.js";
-import type { Itinerary } from '../types/itinerary.js';
+import type { Itinerary } from "../types/itinerary.js";
+import type { DetectedIntent } from "./intent-detector.js";
 
 /**
  * Define agent state using Annotation API
@@ -23,7 +26,7 @@ const AgentStateAnnotation = Annotation.Root({
   }),
   userQuery: Annotation<string>({
     reducer: (left, right) => right ?? left,
-    default: () => '',
+    default: () => "",
   }),
   intent: Annotation<string | undefined>({
     reducer: (left, right) => right ?? left,
@@ -102,18 +105,31 @@ export class TravelAgent {
       .addNode("response_formatter", this.responseFormatterNode.bind(this))
       .addEdge("__start__", "planner")
       .addConditionalEdges("planner", (state: AgentState) => {
-        // If intent requires tools, go to tool executor
-        if (
-          [
-            "SEARCH_DESTINATION",
-            "GET_DETAILS",
-            "FIND_NEARBY",
-            "PLAN_TRIP",
-          ].includes(state.intent || "")
-        ) {
+        // Map new intent types to appropriate actions
+        const intentsThatNeedTools = [
+          "search_destination",
+          "search_attractions",
+          "search_hotels",
+          "search_flights",
+          "search_restaurants",
+          "plan_trip",
+          "get_details",
+          "find_nearby",
+          "calculate_distance",
+          "get_directions",
+          "web_search",
+          "estimate_budget",
+          // Legacy intents for backward compatibility
+          "SEARCH_DESTINATION",
+          "GET_DETAILS",
+          "FIND_NEARBY",
+          "PLAN_TRIP",
+        ];
+
+        if (intentsThatNeedTools.includes(state.intent || "")) {
           return "tool_executor";
         }
-        // Otherwise, go directly to response formatter
+        // Otherwise, go directly to response formatter for casual chat
         return "response_formatter";
       })
       .addEdge("tool_executor", "response_formatter")
@@ -124,148 +140,268 @@ export class TravelAgent {
 
   /**
    * Planner Node: Analyzes user query and decides which tools to use
+   * Now uses LLM-based intent detection instead of hardcoded keywords
    */
   private async plannerNode(state: AgentState): Promise<Partial<AgentState>> {
-    console.log('\n🧠 [PLANNER] Analyzing user query:', state.userQuery);
+    console.log("\n🧠 [PLANNER] Analyzing user query:", state.userQuery);
     try {
-      const messages = [
-        new SystemMessage(TRAVEL_AGENT_SYSTEM_PROMPT),
-        new HumanMessage(state.userQuery),
-      ];
+      // Use LLM-based intent detector
+      const detectedIntent = await intentDetector.detectIntent(state.userQuery);
 
-      const response = await this.model.invoke(messages);
-      const content = response.content as string;
+      console.log(
+        "🎯 [PLANNER] Detected intent:",
+        detectedIntent.primary_intent,
+      );
+      console.log("🔧 [PLANNER] Tools to call:", detectedIntent.tools_to_call);
+      console.log("📊 [PLANNER] Confidence:", detectedIntent.confidence);
+      console.log("💭 [PLANNER] Reasoning:", detectedIntent.reasoning);
 
-      // Simple intent detection based on keywords
-      let intent: AgentState['intent'] = 'CASUAL_CHAT';
-      
-      const query = state.userQuery.toLowerCase();
-      
-      // Check for location-based queries (strongest signal)
-      const locationPatterns = /\b(in|to|at|around)\s+[A-Z][a-z]+/;
-      const hasLocation = locationPatterns.test(state.userQuery);
-      
-      if (query.includes('plan') || query.includes('itinerary') || query.includes('build') && query.includes('trip')) {
-        intent = 'PLAN_TRIP';
-      } else if (query.includes('find') || query.includes('search') || query.includes('show') || query.includes('attractions') || 
-                 query.includes('what can i do') || query.includes('things to do') || query.includes('activities') || 
-                 (query.includes('see') && hasLocation) || (query.includes('visit') && hasLocation)) {
-        intent = 'SEARCH_DESTINATION';
-      } else if (query.includes('near') || query.includes('nearby') || query.includes('around')) {
-        intent = 'FIND_NEARBY';
-      } else if (query.includes('tell me about') || query.includes('details') || query.includes('information')) {
-        intent = 'GET_DETAILS';
-      }
-
-      console.log('🎯 [PLANNER] Detected intent:', intent);
+      const intentString = detectedIntent.primary_intent;
 
       return {
-        intent,
-        messages: [new AIMessage(content)],
+        intent: intentString,
+        messages: [new AIMessage(`Understood: ${detectedIntent.reasoning}`)],
       };
     } catch (error) {
-      console.error('Planner node error:', error);
+      console.error("Planner node error:", error);
       return {
-        error: 'Failed to analyze your request. Please try again.',
+        error: "Failed to analyze your request. Please try again.",
       };
     }
   }
 
   /**
    * Tool Executor Node: Calls appropriate MCP tools based on intent
+   * Now uses the unified tool registry
    */
-  private async toolExecutorNode(state: AgentState): Promise<Partial<AgentState>> {
-    console.log('\n🔧 [TOOL EXECUTOR] Running tools for intent:', state.intent);
+  private async toolExecutorNode(
+    state: AgentState,
+  ): Promise<Partial<AgentState>> {
+    console.log("\n🔧 [TOOL EXECUTOR] Running tools for intent:", state.intent);
     try {
       const { intent, userQuery } = state;
 
-      switch (intent) {
-        case 'SEARCH_DESTINATION': {
+      // Map intent to new naming convention if needed
+      const normalizedIntent =
+        intent?.toLowerCase().replace("_", "_") || "unknown";
+
+      switch (normalizedIntent) {
+        case "search_destination":
+        case "search_attractions": {
           // Extract destination and category from query
           const destination = this.extractDestination(userQuery);
           const category = this.extractCategory(userQuery);
-          
+
+          console.log(
+            `🔍 [TOOL] Searching for ${category || "attractions"} in ${destination}`,
+          );
+
           if (category) {
-            console.log(`🔍 [TOOL] Searching for ${category} in ${destination}`);
-            
-            // First geocode the destination to get coordinates
-            const tempResults = await openTripMapAPI.searchPlaces(destination, 1);
-            if (tempResults.length === 0) {
-              return { searchResults: [] };
-            }
-            
-            const { latitude, longitude } = tempResults[0].location;
-            
-            // Then search by category around those coordinates
-            const categoryResults = await openTripMapAPI.searchByCategory(
-              latitude,
-              longitude,
-              category,
-              10000, // 10km radius
-              10     // limit
+            // Use the search_by_category tool
+            const result = await toolRegistry.executeTool(
+              "search_by_category",
+              {
+                location: destination,
+                category,
+                limit: 10,
+              },
             );
-            
-            console.log(`✅ [TOOL] Got ${categoryResults.length} ${category} results`);
+
+            const categoryResults = result.content?.[0]?.text
+              ? JSON.parse(result.content[0].text).places
+              : [];
+
+            console.log(`✅ [TOOL] Got ${categoryResults.length} results`);
             return { searchResults: categoryResults };
           } else {
-            // Generic search without category filter
-            console.log(`🔍 [TOOL] Calling OpenTripMap API for: ${destination}`);
-            const results = await openTripMapAPI.searchPlaces(destination, 10);
-            console.log(`✅ [TOOL] Got ${results.length} results from API`);
-            return { searchResults: results };
+            // Generic search
+            const result = await toolRegistry.executeTool(
+              "search_destinations",
+              {
+                query: destination,
+                limit: 10,
+              },
+            );
+
+            const searchResults = result.content?.[0]?.text
+              ? JSON.parse(result.content[0].text).destinations
+              : [];
+
+            console.log(`✅ [TOOL] Got ${searchResults.length} results`);
+            return { searchResults };
           }
         }
 
-        case 'FIND_NEARBY': {
-          // For demo, use Eiffel Tower coordinates
-          // In production, extract from user query or previous context
-          console.log(`📍 Finding nearby attractions...`);
-          
-          const attractions = await openTripMapAPI.getNearbyAttractions(
-            48.8584, // Eiffel Tower lat
-            2.2945,  // Eiffel Tower lon
-            5000,    // 5km radius
-            10       // limit
+        case "search_restaurants": {
+          const destination = this.extractDestination(userQuery);
+          console.log(`🍽️ [TOOL] Searching for restaurants in ${destination}`);
+
+          const result = await toolRegistry.executeTool("search_restaurants", {
+            location: destination,
+            limit: 10,
+          });
+
+          const restaurants = result.content?.[0]?.text
+            ? JSON.parse(result.content[0].text).restaurants
+            : [];
+
+          return { searchResults: restaurants };
+        }
+
+        case "find_nearby": {
+          // Use coordinates from context or defaults
+          const result = await toolRegistry.executeTool(
+            "get_nearby_attractions",
+            {
+              latitude: 48.8584,
+              longitude: 2.2945,
+              radius: 5000,
+              limit: 10,
+            },
           );
+
+          const attractions = result.content?.[0]?.text
+            ? JSON.parse(result.content[0].text).attractions
+            : [];
+
           return { nearbyAttractions: attractions };
         }
 
-        case 'GET_DETAILS': {
-          // For demo, get details of first search result
-          // In production, extract place ID from context
+        case "calculate_distance": {
+          const query = userQuery.trim();
+
+          let origin = "";
+          let destination = "";
+
+          // Pattern: from X to Y
+          let match = query.match(/from\s+(.+?)\s+to\s+(.+)/i);
+
+          if (match) {
+            origin = match[1].trim();
+            destination = match[2].trim();
+          }
+
+          // Pattern: between X and Y
+          if (!origin) {
+            match = query.match(/between\s+(.+?)\s+and\s+(.+)/i);
+
+            if (match) {
+              origin = match[1].trim();
+              destination = match[2].trim();
+            }
+          }
+
+          // Pattern: how far is X from Y
+          if (!origin) {
+            match = query.match(/how\s+far\s+is\s+(.+?)\s+from\s+(.+)/i);
+
+            if (match) {
+              origin = match[1].trim();
+              destination = match[2].trim();
+            }
+          }
+
+          // Pattern: X to Y
+          if (!origin) {
+            match = query.match(/^(.+?)\s+to\s+(.+)$/i);
+
+            if (match) {
+              origin = match[1].trim();
+              destination = match[2].trim();
+            }
+          }
+
+          if (!origin || !destination) {
+            return {
+              error:
+                "I couldn't identify the origin and destination. Please try something like 'Distance from Paris to London'.",
+            };
+          }
+
+          console.log(
+            `📏 [TOOL] Calculating distance from "${origin}" to "${destination}"`,
+          );
+
+          const result = await toolRegistry.executeTool("calculate_distance", {
+            origin,
+            destination,
+          });
+
+          const distanceData = result.content?.[0]?.text
+            ? JSON.parse(result.content[0].text)
+            : null;
+
+          
+
+          return {
+            placeDetails: distanceData,
+          };
+        }
+
+        case "web_search": {
+          console.log(`🌐 [TOOL] Web search for: ${userQuery}`);
+
+          const result = await toolRegistry.executeTool("web_search", {
+            query: userQuery,
+            numResults: 5,
+          });
+
+          const searchData = result.content?.[0]?.text
+            ? JSON.parse(result.content[0].text)
+            : null;
+
+          return {
+            placeDetails: searchData,
+          };
+        }
+
+        case "get_details": {
           if (state.searchResults && state.searchResults.length > 0) {
             const placeId = state.searchResults[0].id;
             console.log(`📄 Getting details for place: ${placeId}`);
-            
-            const details = await openTripMapAPI.getEnrichedPlaceDetails(placeId);
+            const result = await toolRegistry.executeTool("get_place_details", {
+              placeId,
+            });
+
+            const details = result.content?.[0]?.text
+              ? JSON.parse(result.content[0].text)
+              : null;
             return { placeDetails: details };
           }
-          return { error: 'No place found to get details for.' };
+          return { error: "No place found to get details for." };
         }
 
-        case 'PLAN_TRIP': {
+        case "plan_trip": {
           // Extract trip parameters from query
           const destination = this.extractDestination(userQuery);
           const duration = this.extractDuration(userQuery);
-          
-          console.log(`🗓️ [TOOL] Building ${duration}-day itinerary for ${destination}`);
-          
-          const itinerary = await itineraryBuilder.buildItinerary(destination, duration);
-          
+
+          console.log(
+            `🗓️ [TOOL] Building ${duration}-day itinerary for ${destination}`,
+          );
+
+          const itinerary = await itineraryBuilder.buildItinerary(
+            destination,
+            duration,
+          );
+
           if (itinerary) {
-            console.log(`✅ [TOOL] Successfully built itinerary with ${itinerary.days.length} days`);
+            console.log(
+              `✅ [TOOL] Successfully built itinerary with ${itinerary.days.length} days`,
+            );
           }
-          
+
           return { itinerary };
         }
 
         default:
+          console.log("ℹ️  [TOOL] No specific tools needed for this intent");
           return {};
       }
     } catch (error) {
-      console.error('Tool executor error:', error);
+      console.error("Tool executor error:", error);
       return {
-        error: 'Failed to fetch travel information. Please try again.',
+        error: "Failed to fetch travel information. Please try again.",
       };
     }
   }
@@ -273,10 +409,19 @@ export class TravelAgent {
   /**
    * Response Formatter Node: Creates conversational response from tool results
    */
-  private async responseFormatterNode(state: AgentState): Promise<Partial<AgentState>> {
-    console.log('\n✍️  [FORMATTER] Generating response...');
+  private async responseFormatterNode(
+    state: AgentState,
+  ): Promise<Partial<AgentState>> {
+    console.log("\n✍️  [FORMATTER] Generating response...");
     try {
-      const { intent, searchResults, nearbyAttractions, placeDetails, itinerary, error } = state;
+      const {
+        intent,
+        searchResults,
+        nearbyAttractions,
+        placeDetails,
+        itinerary,
+        error,
+      } = state;
 
       // Handle errors
       if (error) {
@@ -284,7 +429,7 @@ export class TravelAgent {
       }
 
       // Format response based on what data we have
-      let formattedResponse = '';
+      let formattedResponse = "";
 
       if (itinerary) {
         formattedResponse = this.formatItinerary(itinerary);
@@ -293,24 +438,37 @@ export class TravelAgent {
       } else if (nearbyAttractions && nearbyAttractions.length > 0) {
         formattedResponse = this.formatNearbyAttractions(nearbyAttractions);
       } else if (placeDetails) {
-        formattedResponse = this.formatPlaceDetails(placeDetails);
+        if (intent === "calculate_distance") {
+          formattedResponse = this.formatDistance(placeDetails);
+        }
+        else if (intent === "web_search") {
+          formattedResponse = await this.summarizeWebSearch(
+            state.userQuery,
+            placeDetails,
+          );
+        } else {
+          formattedResponse = this.formatPlaceDetails(placeDetails);
+        }
       } else {
         // No tool results, use LLM to generate conversational response
         const messages = [
           new SystemMessage(TRAVEL_AGENT_SYSTEM_PROMPT),
           new HumanMessage(state.userQuery),
         ];
-        console.log('🤖 [FORMATTER] Calling GPT-4o-mini for conversational response...');
+        console.log(
+          "🤖 [FORMATTER] Calling GPT-4o-mini for conversational response...",
+        );
         const response = await this.model.invoke(messages);
         formattedResponse = response.content as string;
       }
 
-      console.log('✅ [FORMATTER] Response generated successfully\n');
+      console.log("✅ [FORMATTER] Response generated successfully\n");
       return { response: formattedResponse };
     } catch (error) {
-      console.error('Response formatter error:', error);
+      console.error("Response formatter error:", error);
       return {
-        response: 'I had trouble formatting the response. Please try asking again.',
+        response:
+          "I had trouble formatting the response. Please try asking again.",
       };
     }
   }
@@ -319,34 +477,34 @@ export class TravelAgent {
    * Helper: Extract destination name from user query
    */
   private extractDestination(query: string): string {
-    const words = query.split(' ');
-    
+    const words = query.split(" ");
+
     // Pattern 1: "attractions in Paris", "things to do in Tokyo"
-    const inIndex = words.findIndex(w => w.toLowerCase() === 'in');
+    const inIndex = words.findIndex((w) => w.toLowerCase() === "in");
     if (inIndex !== -1 && words[inIndex + 1]) {
-      return words[inIndex + 1].replace(/[^a-zA-Z]/gi, '');
+      return words[inIndex + 1].replace(/[^a-zA-Z]/gi, "");
     }
-    
-    // Pattern 2: "visit Paris", "go to Barcelona"  
-    const prepositions = ['to', 'at', 'near', 'around', 'visit'];
+
+    // Pattern 2: "visit Paris", "go to Barcelona"
+    const prepositions = ["to", "at", "near", "around", "visit"];
     for (let i = 0; i < words.length; i++) {
       if (prepositions.includes(words[i].toLowerCase()) && words[i + 1]) {
         const nextWord = words[i + 1].toLowerCase();
         // Skip common words like "do", "see", "the"
-        if (!['do', 'see', 'the', 'a', 'an', 'some'].includes(nextWord)) {
-          return words[i + 1].replace(/[^a-zA-Z]/gi, '');
+        if (!["do", "see", "the", "a", "an", "some"].includes(nextWord)) {
+          return words[i + 1].replace(/[^a-zA-Z]/gi, "");
         }
       }
     }
-    
+
     // Pattern 3: Look for capitalized words (likely place names)
     const capitalized = query.match(/\b[A-Z][a-z]+\b/g);
     if (capitalized && capitalized.length > 0) {
       return capitalized[capitalized.length - 1];
     }
-    
+
     // Fallback: return last word
-    return words[words.length - 1].replace(/[^a-zA-Z]/gi, '');
+    return words[words.length - 1].replace(/[^a-zA-Z]/gi, "");
   }
 
   /**
@@ -354,35 +512,43 @@ export class TravelAgent {
    */
   private extractDuration(query: string): number {
     const lowerQuery = query.toLowerCase();
-    
+
     // Pattern 1: "3-day", "5 day", "7 days"
     const dayMatch = query.match(/(\d+)[-\s]?days?/i);
     if (dayMatch) {
       return parseInt(dayMatch[1]);
     }
-    
+
     // Pattern 2: "three day", "five days" (word numbers)
     const wordNumbers: Record<string, number> = {
-      'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
-      'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+      one: 1,
+      two: 2,
+      three: 3,
+      four: 4,
+      five: 5,
+      six: 6,
+      seven: 7,
+      eight: 8,
+      nine: 9,
+      ten: 10,
     };
-    
+
     for (const [word, num] of Object.entries(wordNumbers)) {
       if (lowerQuery.includes(`${word} day`)) {
         return num;
       }
     }
-    
+
     // Pattern 3: "weekend" = 2-3 days
-    if (lowerQuery.includes('weekend')) {
+    if (lowerQuery.includes("weekend")) {
       return 3;
     }
-    
+
     // Pattern 4: "week" = 7 days
-    if (lowerQuery.includes('week')) {
+    if (lowerQuery.includes("week")) {
       return 7;
     }
-    
+
     // Default: 3 days
     return 3;
   }
@@ -393,42 +559,42 @@ export class TravelAgent {
    */
   private extractCategory(query: string): string | null {
     const queryLower = query.toLowerCase();
-    
+
     const categoryMap: { [key: string]: string } = {
-      'beach': 'beaches',
-      'beaches': 'beaches',
-      'restaurant': 'foods',
-      'restaurants': 'foods',
-      'food': 'foods',
-      'dining': 'foods',
-      'eat': 'foods',
-      'museum': 'museums',
-      'museums': 'museums',
-      'park': 'natural',
-      'parks': 'natural',
-      'nature': 'natural',
-      'natural': 'natural',
-      'garden': 'natural',
-      'gardens': 'natural',
-      'monument': 'monuments',
-      'monuments': 'monuments',
-      'church': 'religion',
-      'churches': 'religion',
-      'temple': 'religion',
-      'temples': 'religion',
-      'mosque': 'religion',
-      'mosques': 'religion',
-      'shopping': 'shops',
-      'shop': 'shops',
-      'mall': 'shops',
-      'hotel': 'accomodations',
-      'hotels': 'accomodations',
-      'stay': 'accomodations',
-      'nightlife': 'nightlife',
-      'bar': 'nightlife',
-      'bars': 'nightlife',
-      'club': 'nightlife',
-      'clubs': 'nightlife',
+      beach: "beaches",
+      beaches: "beaches",
+      restaurant: "foods",
+      restaurants: "foods",
+      food: "foods",
+      dining: "foods",
+      eat: "foods",
+      museum: "museums",
+      museums: "museums",
+      park: "natural",
+      parks: "natural",
+      nature: "natural",
+      natural: "natural",
+      garden: "natural",
+      gardens: "natural",
+      monument: "monuments",
+      monuments: "monuments",
+      church: "religion",
+      churches: "religion",
+      temple: "religion",
+      temples: "religion",
+      mosque: "religion",
+      mosques: "religion",
+      shopping: "shops",
+      shop: "shops",
+      mall: "shops",
+      hotel: "accomodations",
+      hotels: "accomodations",
+      stay: "accomodations",
+      nightlife: "nightlife",
+      bar: "nightlife",
+      bars: "nightlife",
+      club: "nightlife",
+      clubs: "nightlife",
     };
 
     for (const [keyword, category] of Object.entries(categoryMap)) {
@@ -443,6 +609,42 @@ export class TravelAgent {
   /**
    * Helper: Format search results into readable text
    */
+  private async summarizeWebSearch(
+    userQuery: string,
+    searchData: any,
+  ): Promise<string> {
+    const searchSummary = searchData.results
+      .map((r: any, i: number) => `${i + 1}. ${r.title}\n${r.snippet}`)
+      .join("\n\n");
+
+    const prompt = `
+The user asked:
+
+"${userQuery}"
+
+Below are web search results:
+
+${searchSummary}
+
+Answer the user's question naturally.
+
+Rules:
+- Do NOT mention "search results".
+- Combine information from all sources.
+- Ignore duplicate information.
+- If multiple sources agree, present that as the answer.
+- If there are different opinions, briefly mention them.
+- Do not include URLs.
+- Write like an experienced travel guide.
+`;
+
+    const response = await this.model.invoke([
+      new SystemMessage(TRAVEL_AGENT_SYSTEM_PROMPT),
+      new HumanMessage(prompt),
+    ]);
+
+    return response.content as string;
+  }
   private formatSearchResults(results: any[]): string {
     const count = results.length;
     let response = `I found ${count} amazing places! Here are the highlights:\n\n`;
@@ -450,19 +652,20 @@ export class TravelAgent {
     results.slice(0, 5).forEach((place, index) => {
       response += `${index + 1}. **${place.name}**\n`;
       response += `   📍 Location: ${place.location.latitude.toFixed(4)}, ${place.location.longitude.toFixed(4)}\n`;
-      
+
       if (place.category && place.category.length > 0) {
-        response += `   🏷️  Categories: ${place.category.slice(0, 3).join(', ')}\n`;
+        response += `   🏷️  Categories: ${place.category.slice(0, 3).join(", ")}\n`;
       }
-      
+
       if (place.rating) {
         response += `   ⭐ Rating: ${place.rating}/7\n`;
       }
-      
-      response += '\n';
+
+      response += "\n";
     });
 
-    response += '\nWould you like more details about any of these places? Just let me know! 🗺️';
+    response +=
+      "\nWould you like more details about any of these places? Just let me know! 🗺️";
     return response;
   }
 
@@ -474,45 +677,72 @@ export class TravelAgent {
 
     attractions.slice(0, 5).forEach((place, index) => {
       response += `${index + 1}. **${place.name}**\n`;
-      
+
       if (place.distance) {
         response += `   📏 Distance: ${place.distance}m\n`;
       }
-      
+
       if (place.category && place.category.length > 0) {
-        response += `   🏷️  ${place.category.slice(0, 2).join(', ')}\n`;
+        response += `   🏷️  ${place.category.slice(0, 2).join(", ")}\n`;
       }
-      
-      response += '\n';
+
+      response += "\n";
     });
 
-    response += '\nThese are all within walking distance! Want to add any to your itinerary? ✨';
+    response +=
+      "\nThese are all within walking distance! Want to add any to your itinerary? ✨";
     return response;
   }
 
   /**
    * Helper: Format place details
    */
+  private formatDistance(details: any): string {
+    if (!details) {
+      return "❌ No distance information found.";
+    }
+
+    if (details.error) {
+      return `❌ ${details.error}`;
+    }
+
+    if (!details.distance) {
+      console.log("Unexpected distance object:", details);
+      return "❌ Invalid distance data received.";
+    }
+
+    return `
+## 📍 Distance Information
+
+**From:** ${details.origin}
+**To:** ${details.destination}
+
+🚗 Distance: ${details.distance.kilometers} km (${details.distance.miles} miles)
+
+⏱️ Estimated Time: ${details.estimated_travel_time.by_car_hours} hours
+(${details.estimated_travel_time.by_car_minutes} minutes)
+`;
+  }
   private formatPlaceDetails(details: any): string {
     let response = `# ${details.name}\n\n`;
-    
+
     if (details.description) {
       response += `${details.description}\n\n`;
     }
-    
+
     if (details.rating) {
       response += `⭐ **Rating**: ${details.rating}/7\n`;
     }
-    
+
     if (details.category && details.category.length > 0) {
-      response += `🏷️  **Categories**: ${details.category.join(', ')}\n`;
+      response += `🏷️  **Categories**: ${details.category.join(", ")}\n`;
     }
-    
+
     if (details.image) {
       response += `\n🖼️ [View Image](${details.image})\n`;
     }
-    
-    response += '\nWould you like more details about any of these places? ✨';
+
+    response += "\nWould you like more details about any of these places? ✨";
     return response;
   }
 
@@ -521,7 +751,7 @@ export class TravelAgent {
    */
   private formatItinerary(itinerary: Itinerary): string {
     const { tripMetadata, days } = itinerary;
-    
+
     let response = `# 🗺️ ${tripMetadata.duration}-Day ${tripMetadata.destination} Itinerary\n\n`;
     response += `I've created a detailed ${tripMetadata.duration}-day itinerary for your trip to ${tripMetadata.destination}! Here's your personalized plan:\n\n`;
     response += `---\n\n`;
@@ -532,25 +762,30 @@ export class TravelAgent {
       day.timeSlots.forEach((slot) => {
         if (slot.activities.length === 0) return;
 
-        const emoji = slot.period === 'morning' ? '☀️' : slot.period === 'afternoon' ? '🌆' : '🌙';
+        const emoji =
+          slot.period === "morning"
+            ? "☀️"
+            : slot.period === "afternoon"
+              ? "🌆"
+              : "🌙";
         response += `### ${emoji} ${slot.period.charAt(0).toUpperCase() + slot.period.slice(1)} (${slot.startTime}-${slot.endTime})\n\n`;
 
         slot.activities.forEach((activity, idx) => {
           response += `**${idx + 1}. ${activity.name}**\n`;
           response += `   ⏱️  Duration: ${activity.duration}\n`;
-          
+
           if (activity.estimatedCost) {
             response += `   💰 Cost: ${activity.estimatedCost}\n`;
           }
-          
+
           if (activity.category) {
             response += `   🏷️  Type: ${activity.category}\n`;
           }
-          
+
           if (activity.description) {
-            response += `   📝 ${activity.description.substring(0, 100)}${activity.description.length > 100 ? '...' : ''}\n`;
+            response += `   📝 ${activity.description.substring(0, 100)}${activity.description.length > 100 ? "..." : ""}\n`;
           }
-          
+
           response += `\n`;
         });
       });
@@ -592,10 +827,13 @@ export class TravelAgent {
       // Run the graph
       const result = await this.graph.invoke(initialState);
 
-      return result.response || 'I apologize, but I had trouble processing your request.';
+      return (
+        result.response ||
+        "I apologize, but I had trouble processing your request."
+      );
     } catch (error) {
-      console.error('Chat error:', error);
-      return 'I encountered an error. Please try again.';
+      console.error("Chat error:", error);
+      return "I encountered an error. Please try again.";
     }
   }
 }
