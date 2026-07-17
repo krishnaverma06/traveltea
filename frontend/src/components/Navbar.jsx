@@ -6,7 +6,7 @@ export default function Navbar() {
     <header className="w-full border-b bg-background">
       <nav className="max-w-7xl mx-auto flex items-center justify-between px-6 md:px-10 py-4">
         {/* Logo / Brand Name */}
-        <Link to="/" className="text-xl md:text-2xl font-bold">
+        <Link to="/" className="text-xl md:text-2xl font-bold text-black">
           TravelTea
         </Link>
 
@@ -35,10 +35,14 @@ export default function Navbar() {
         {/* Auth Buttons */}
         <div className="flex items-center gap-3">
           <Button variant="outline" asChild>
-            <Link to="/login">Login</Link>
+            <Link to="/login" className="text-black">
+              Login
+            </Link>
           </Button>
-          <Button asChild>
-            <Link to="/signup">Sign Up</Link>
+          <Button asChild className="bg-black">
+            <Link className="text-white" to="/signup">
+              Sign Up
+            </Link>
           </Button>
         </div>
       </nav>
