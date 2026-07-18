@@ -10,6 +10,7 @@ import chatRoutes from './routes/chat.js';
 import { setSocketIO } from './controllers/chatController.js';
 import authRoutes from "./routes/authRoutes.js";
 import tripRoutes from "./routes/tripRoutes.js";
+import itineraryRoutes from './routes/itinerary.js';
 
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
@@ -49,8 +50,12 @@ app.get('/api', (req, res) => {
   res.json({ message: 'TravelTea API is running' });
 });
 
+
+
 // Chat routes
 app.use('/api/chat', chatRoutes);
+app.use('/api/itinerary', itineraryRoutes);
+
 // Auth routes
 app.use('/api/auth', authRoutes);
 app.use("/api/trips", tripRoutes);

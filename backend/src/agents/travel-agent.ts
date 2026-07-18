@@ -806,7 +806,7 @@ Rules:
   /**
    * Main method: Process user query and return response
    */
-  async chat(userQuery: string, conversationId?: string): Promise<string> {
+  async chat(userQuery: string, conversationId?: string): Promise<any> {
     try {
       console.log(`\n🤖 Processing: "${userQuery}"\n`);
 
@@ -827,16 +827,189 @@ Rules:
       // Run the graph
       const result = await this.graph.invoke(initialState);
 
-      return (
-        result.response ||
-        "I apologize, but I had trouble processing your request."
-      );
+      return {
+        response: result.response || 'I apologize, but I had trouble processing your request.',
+        itinerary: result.itinerary,
+        error: result.error
+      };
     } catch (error) {
       console.error("Chat error:", error);
-      return "I encountered an error. Please try again.";
+      return {
+        response: 'I encountered an error. Please try again.',
+        error: error instanceof Error ? error.message : String(error)
+      };
     }
   }
-}
+
+  /**
+   * Generate itinerary with structured trip context
+   * This is optimized for the onboarding flow where we have complete trip details
+   */
+  async generateItineraryWithContext(tripContext: any): Promise<any> {
+    try {
+      console.log('\n🎯 [CONTEXT ITINERARY] Generating with full trip context');
+      
+      const { TRAVEL_TYPE_PREFERENCES, calculateDailyBudget } = await import('../types/tripContext.js');
+      
+      // Calculate total days from cities
+      const totalDays = tripContext.cities.reduce((sum: number, city: any) => sum + city.days, 0);
+      
+      // Get daily budget breakdown
+      const dailyBudget = calculateDailyBudget(
+        tripContext.budget,
+        tripContext.budgetMode,
+        totalDays
+      );
+      
+      // Get travel type preferences
+      const travelPrefs = TRAVEL_TYPE_PREFERENCES[tripContext.travelType as keyof typeof TRAVEL_TYPE_PREFERENCES];
+      
+      // console.log('💰 Daily budget:', dailyBudget);
+      // console.log('🎨 Travel preferences:', travelPrefs);
+      
+      // Build itinerary for each city
+      const allDays: any[] = [];
+      let currentDayNumber = 1;
+      
+      for (const city of tripContext.cities) {
+        console.log(`\n🏙️  Building itinerary for ${city.name} (${city.days} days)`);
+        
+        // Build city-specific itinerary with context
+        const cityItinerary = await itineraryBuilder.buildItineraryWithContext(
+          city.name,
+          city.days,
+          {
+            dailyBudget: dailyBudget.activities, // Budget for activities per day
+            preferredCategories: travelPrefs.categories,
+            activityLevel: travelPrefs.activityLevel,
+            pacing: travelPrefs.pacing,
+            numberOfPeople: tripContext.people,
+          }
+        );
+        
+        if (cityItinerary && cityItinerary.days) {
+          // Renumber days for multi-city trips
+          cityItinerary.days.forEach((day: any) => {
+            day.dayNumber = currentDayNumber++;
+            day.city = city.name;
+            allDays.push(day);
+          });
+        }
+      }
+      
+      // Create complete itinerary
+      const completeItinerary = {
+        tripMetadata: {
+          destination: tripContext.cities.map((c: any) => c.name).join(' → '),
+          duration: totalDays,
+          startDate: tripContext.startDate,
+          travelType: tripContext.travelType,
+          numberOfPeople: tripContext.people,
+          budget: {
+            total: tripContext.budget.total,
+            perDay: dailyBudget.totalPerDay,
+            breakdown: dailyBudget
+          }
+        },
+        days: allDays
+      };
+      
+      // Format the response
+      const formattedResponse = this.formatItineraryWithContext(completeItinerary, tripContext);
+      
+      console.log('✅ [CONTEXT ITINERARY] Successfully generated itinerary');
+      
+      return {
+        response: formattedResponse,
+        itinerary: completeItinerary,
+        error: null
+      };
+      
+    } catch (error) {
+      console.error('❌ Error generating context itinerary:', error);
+      return {
+        response: null,
+        itinerary: null,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  /**
+   * Format itinerary with trip context metadata
+   */
+  private formatItineraryWithContext(itinerary: any, tripContext: any): string {
+    const { tripMetadata, days } = itinerary;
+    const cityNames = tripContext.cities.map((c: any) => c.name).join(' → ');
+    
+    let response = `# 🗺️ Your ${tripMetadata.duration}-Day ${cityNames} Adventure\n\n`;
+    response += `I've crafted a personalized **${tripContext.travelType}** itinerary for ${tripContext.people} ${tripContext.people === 1 ? 'traveler' : 'travelers'}!\n\n`;
+    
+    // Budget summary
+    response += `## 💰 Budget Overview\n`;
+    response += `- **Total Budget**: $${tripMetadata.budget.total.toLocaleString()}\n`;
+    response += `- **Per Day**: $${Math.round(tripMetadata.budget.perDay).toLocaleString()}\n`;
+    response += `- **Activities/Day**: $${Math.round(tripMetadata.budget.breakdown.activities).toLocaleString()}\n\n`;
+    
+    response += `---\n\n`;
+
+    // Group days by city for multi-city trips
+    const daysByCity = days.reduce((acc: any, day: any) => {
+      const city = day.city || tripContext.cities[0].name;
+      if (!acc[city]) acc[city] = [];
+      acc[city].push(day);
+      return acc;
+    }, {});
+
+    Object.entries(daysByCity).forEach(([city, cityDays]: [string, any]) => {
+      if (Object.keys(daysByCity).length > 1) {
+        response += `# 🏙️ ${city}\n\n`;
+      }
+
+      (cityDays as any[]).forEach((day) => {
+        response += `## 📅 Day ${day.dayNumber}: ${day.title}\n\n`;
+
+        day.timeSlots.forEach((slot: any) => {
+          if (slot.activities.length === 0) return;
+
+          const emoji = slot.period === 'morning' ? '☀️' : slot.period === 'afternoon' ? '🌆' : '🌙';
+          response += `### ${emoji} ${slot.period.charAt(0).toUpperCase() + slot.period.slice(1)} (${slot.startTime}-${slot.endTime})\n\n`;
+
+          slot.activities.forEach((activity: any, idx: number) => {
+            response += `**${idx + 1}. ${activity.name}**\n`;
+            response += `   ⏱️  Duration: ${activity.duration}\n`;
+            
+            if (activity.estimatedCost) {
+              response += `   💰 Cost: ${activity.estimatedCost}\n`;
+            }
+            
+            if (activity.category) {
+              response += `   🏷️  Type: ${activity.category}\n`;
+            }
+            
+            if (activity.description) {
+              response += `   📝 ${activity.description.substring(0, 100)}${activity.description.length > 100 ? '...' : ''}\n`;
+            }
+            
+            response += `\n`;
+          });
+        });
+
+        response += `---\n\n`;
+      });
+    });
+
+    const totalActivities = days.reduce((sum: number, day: any) => 
+      sum + day.timeSlots.reduce((s: number, slot: any) => s + slot.activities.length, 0), 0
+    );
+    
+    response += `\n✨ Your itinerary includes **${totalActivities} activities** across **${days.length} days**!\n\n`;
+    response += `🎯 Optimized for: **${tripContext.travelType} travel**\n`;
+    response += `👥 Perfect for: **${tripContext.people} ${tripContext.people === 1 ? 'person' : 'people'}**\n\n`;
+
+    return response;
+  }
+} 
 
 // Lazy singleton instance - only created when first accessed
 let _travelAgentInstance: TravelAgent | null = null;
@@ -844,11 +1017,10 @@ let _travelAgentInstance: TravelAgent | null = null;
 export function getTravelAgent(): TravelAgent {
   if (!_travelAgentInstance) {
     _travelAgentInstance = new TravelAgent({
-      modelName: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+      modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
       temperature: 0.7,
     });
   }
-
   return _travelAgentInstance;
 }
 
