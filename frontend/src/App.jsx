@@ -13,11 +13,11 @@ import BudgetPage from "./pages/BudgetPage.jsx";
 import PreferencesPage from "./pages/PreferencesPage.jsx";
 import ResultsPage from "./pages/ResultsPage.jsx";
 import TripDetailsPage from "./pages/TripDetailsPage.jsx";
-import { Chat } from "./pages/Chat";
+import Chat  from "./pages/Chat";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import OnboardingPage from "./pages/OnboardingPage"
-
+import Home from "./pages/Home"
 const ProtectedRoute = ({
   children,
   condition = true,
@@ -104,8 +104,16 @@ const AppContent = () => {
             </ProtectedRoute>
           } 
         />
+         <Route
+          path="/home"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
         <Route
-          path="/plan/chat"
+          path="/chat"
           element={
             <ProtectedRoute>
               <Chat />
