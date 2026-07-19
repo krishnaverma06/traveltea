@@ -865,71 +865,103 @@ Rules:
    * Generate itinerary with structured trip context
    * This is optimized for the onboarding flow where we have complete trip details
    */
-  async generateItineraryWithContext(tripContext: any): Promise<any> {
+   async generateItineraryWithContext(tripContext: any): Promise<any> {
     try {
-      console.log("\n🎯 [CONTEXT ITINERARY] Generating with full trip context");
-
-      const { TRAVEL_TYPE_PREFERENCES, calculateDailyBudget } =
-        await import("../types/tripContext.js");
-
+      console.log('\n🎯 [CONTEXT ITINERARY] Generating with full trip context');
+      
+      const { TRAVEL_TYPE_PREFERENCES, calculateDailyBudget } = await import('../types/tripContext.js');
+      
       // Calculate total days from cities
-      const totalDays = tripContext.cities.reduce(
-        (sum: number, city: any) => sum + city.days,
-        0,
-      );
-
+      const totalDays = tripContext.cities.reduce((sum: number, city: any) => sum + city.days, 0);
+      
       // Get daily budget breakdown
       const dailyBudget = calculateDailyBudget(
         tripContext.budget,
         tripContext.budgetMode,
-        totalDays,
+        totalDays
       );
-
+      
       // Get travel type preferences
-      const travelPrefs =
-        TRAVEL_TYPE_PREFERENCES[
-          tripContext.travelType as keyof typeof TRAVEL_TYPE_PREFERENCES
-        ];
-
-      // console.log('💰 Daily budget:', dailyBudget);
-      // console.log('🎨 Travel preferences:', travelPrefs);
-
-      // Build itinerary for each city
+      const travelPrefs = TRAVEL_TYPE_PREFERENCES[tripContext.travelType as keyof typeof TRAVEL_TYPE_PREFERENCES];
+      
+      console.log('💰 Daily budget:', dailyBudget);
+      console.log('🎨 Travel preferences:', travelPrefs);
+      console.log('🗓️ Total days:', totalDays);
+      console.log('🏙️ Cities:', tripContext.cities.map((c: any) => `${c.name} (${c.days} days)`));
+      
+      // Collect all places from all cities first for better distribution
+      const allCityPlaces: Map<string, any> = new Map();
+      
+      for (const city of tripContext.cities) {
+        console.log(`\n🔍 Fetching enhanced places for ${city.name}`);
+        
+        // Get city coordinates
+        const coords = await itineraryBuilder.getDestinationCoords(city.name);
+        if (coords) {
+          // Fetch enhanced places including hotels and trip-type specific activities
+          const cityPlaces = await itineraryBuilder.fetchEnhancedPlaces(
+            coords.lat,
+            coords.lon,
+            travelPrefs.categories,
+            tripContext.travelType,
+            true // Include hotels
+          );
+          
+          allCityPlaces.set(city.name, {
+            places: cityPlaces,
+            coords: coords,
+            days: city.days
+          });
+          
+          console.log(`✅ Found ${cityPlaces.total} enhanced places in ${city.name} (${cityPlaces.activities.length} activities, ${cityPlaces.restaurants.length} restaurants, ${cityPlaces.hotels.length} hotels)`);
+        }
+      }
+      
+      // Build itinerary with intelligent distribution
       const allDays: any[] = [];
       let currentDayNumber = 1;
-
+      
+      // Global tracking to prevent repetition across all days
+      const globalUsedPlaces = new Set<string>();
+      
       for (const city of tripContext.cities) {
-        console.log(
-          `\n🏙️  Building itinerary for ${city.name} (${city.days} days)`,
-        );
-
-        // Build city-specific itinerary with context
-        const cityItinerary = await itineraryBuilder.buildItineraryWithContext(
+        const cityData = allCityPlaces.get(city.name);
+        if (!cityData) continue;
+        
+        console.log(`\n�️ Building ${city.days} days for ${city.name}`);
+        
+        // Build city-specific itinerary with global state tracking
+        const cityItinerary = await itineraryBuilder.buildItineraryWithContextAndState(
           city.name,
           city.days,
           {
-            dailyBudget: dailyBudget.activities, // Budget for activities per day
+            dailyBudget: dailyBudget.activities,
             preferredCategories: travelPrefs.categories,
             activityLevel: travelPrefs.activityLevel,
             pacing: travelPrefs.pacing,
             numberOfPeople: tripContext.people,
-          },
+            places: cityData.places,
+            coords: cityData.coords,
+            globalUsedPlaces: globalUsedPlaces, // Pass global state
+            startingDayNumber: currentDayNumber
+          }
         );
-
+        
         if (cityItinerary && cityItinerary.days) {
-          // Renumber days for multi-city trips
+          // Add city-specific days to all days
           cityItinerary.days.forEach((day: any) => {
-            day.dayNumber = currentDayNumber++;
             day.city = city.name;
             allDays.push(day);
           });
+          
+          currentDayNumber += city.days;
         }
       }
-
+      
       // Create complete itinerary
       const completeItinerary = {
         tripMetadata: {
-          destination: tripContext.cities.map((c: any) => c.name).join(" → "),
+          destination: tripContext.cities.map((c: any) => c.name).join(' → '),
           duration: totalDays,
           startDate: tripContext.startDate,
           travelType: tripContext.travelType,
@@ -937,31 +969,31 @@ Rules:
           budget: {
             total: tripContext.budget.total,
             perDay: dailyBudget.totalPerDay,
-            breakdown: dailyBudget,
-          },
+            breakdown: dailyBudget
+          }
         },
-        days: allDays,
+        days: allDays
       };
-
+      
       // Format the response
-      const formattedResponse = this.formatItineraryWithContext(
-        completeItinerary,
-        tripContext,
-      );
-
-      console.log("✅ [CONTEXT ITINERARY] Successfully generated itinerary");
-
+      const formattedResponse = this.formatItineraryWithContext(completeItinerary, tripContext);
+      
+      console.log(`✅ [CONTEXT ITINERARY] Successfully generated ${allDays.length}-day itinerary`);
+      console.log(`📊 Total activities: ${allDays.reduce((sum, day) => 
+        sum + day.timeSlots.reduce((s: number, slot: any) => s + slot.activities.length, 0), 0)}`);
+      
       return {
         response: formattedResponse,
         itinerary: completeItinerary,
-        error: null,
+        error: null
       };
+      
     } catch (error) {
-      console.error("❌ Error generating context itinerary:", error);
+      console.error('❌ Error generating context itinerary:', error);
       return {
         response: null,
         itinerary: null,
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : String(error)
       };
     }
   }
