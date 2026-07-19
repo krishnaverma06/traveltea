@@ -15,6 +15,10 @@ import type { AgentConfig } from "./types.js";
 import type { Destination } from "../mcp-servers/places/types.js";
 import type { Itinerary } from "../types/itinerary.js";
 import type { DetectedIntent } from "./intent-detector.js";
+import {
+  formatCategoriesForAPI,
+  getCategoryDisplayName,
+} from "../config/opentripmap-categories.js";
 
 /**
  * Define agent state using Annotation API
@@ -140,7 +144,7 @@ export class TravelAgent {
 
   /**
    * Planner Node: Analyzes user query and decides which tools to use
-   * Now uses LLM-based intent detection instead of hardcoded keywords
+   * Now uses LLM-based intent detection with category extraction
    */
   private async plannerNode(state: AgentState): Promise<Partial<AgentState>> {
     console.log("\n🧠 [PLANNER] Analyzing user query:", state.userQuery);
@@ -153,13 +157,19 @@ export class TravelAgent {
         detectedIntent.primary_intent,
       );
       console.log("🔧 [PLANNER] Tools to call:", detectedIntent.tools_to_call);
+      console.log(
+        "🏷️  [PLANNER] Categories:",
+        detectedIntent.entities.opentripmap_kinds,
+      );
       console.log("📊 [PLANNER] Confidence:", detectedIntent.confidence);
       console.log("💭 [PLANNER] Reasoning:", detectedIntent.reasoning);
 
+      // Store the detected intent and entities for tool execution
       const intentString = detectedIntent.primary_intent;
 
       return {
         intent: intentString,
+        searchResults: detectedIntent.entities.opentripmap_kinds as any, // Store categories temporarily
         messages: [new AIMessage(`Understood: ${detectedIntent.reasoning}`)],
       };
     } catch (error) {
@@ -172,7 +182,7 @@ export class TravelAgent {
 
   /**
    * Tool Executor Node: Calls appropriate MCP tools based on intent
-   * Now uses the unified tool registry
+   * Now uses detected categories from intent detection
    */
   private async toolExecutorNode(
     state: AgentState,
@@ -180,6 +190,9 @@ export class TravelAgent {
     console.log("\n🔧 [TOOL EXECUTOR] Running tools for intent:", state.intent);
     try {
       const { intent, userQuery } = state;
+
+      // Extract detected categories (stored temporarily in searchResults by planner)
+      const detectedCategories = (state.searchResults as any) || [];
 
       // Map intent to new naming convention if needed
       const normalizedIntent =
@@ -190,19 +203,25 @@ export class TravelAgent {
         case "search_attractions": {
           // Extract destination and category from query
           const destination = this.extractDestination(userQuery);
-          const category = this.extractCategory(userQuery);
+
+          const categories =
+            detectedCategories.length > 0
+              ? detectedCategories
+              : [this.extractCategory(userQuery)].filter(Boolean);
 
           console.log(
-            `🔍 [TOOL] Searching for ${category || "attractions"} in ${destination}`,
+            `🔍 [TOOL] Searching for ${categories.join(", ") || "attractions"} in ${destination}`,
           );
 
-          if (category) {
-            // Use the search_by_category tool
+          if (categories.length > 0) {
+            // Use the search_by_category tool with detected categories
+            const categoryKinds = formatCategoriesForAPI(categories);
+
             const result = await toolRegistry.executeTool(
               "search_by_category",
               {
                 location: destination,
-                category,
+                category: categoryKinds,
                 limit: 10,
               },
             );
@@ -211,7 +230,9 @@ export class TravelAgent {
               ? JSON.parse(result.content[0].text).places
               : [];
 
-            console.log(`✅ [TOOL] Got ${categoryResults.length} results`);
+            console.log(
+              `✅ [TOOL] Got ${categoryResults.length} results for categories: ${categories.map(getCategoryDisplayName).join(", ")}`,
+            );
             return { searchResults: categoryResults };
           } else {
             // Generic search
@@ -331,8 +352,6 @@ export class TravelAgent {
             ? JSON.parse(result.content[0].text)
             : null;
 
-          
-
           return {
             placeDetails: distanceData,
           };
@@ -440,8 +459,7 @@ export class TravelAgent {
       } else if (placeDetails) {
         if (intent === "calculate_distance") {
           formattedResponse = this.formatDistance(placeDetails);
-        }
-        else if (intent === "web_search") {
+        } else if (intent === "web_search") {
           formattedResponse = await this.summarizeWebSearch(
             state.userQuery,
             placeDetails,
@@ -828,15 +846,17 @@ Rules:
       const result = await this.graph.invoke(initialState);
 
       return {
-        response: result.response || 'I apologize, but I had trouble processing your request.',
+        response:
+          result.response ||
+          "I apologize, but I had trouble processing your request.",
         itinerary: result.itinerary,
-        error: result.error
+        error: result.error,
       };
     } catch (error) {
       console.error("Chat error:", error);
       return {
-        response: 'I encountered an error. Please try again.',
-        error: error instanceof Error ? error.message : String(error)
+        response: "I encountered an error. Please try again.",
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -847,33 +867,42 @@ Rules:
    */
   async generateItineraryWithContext(tripContext: any): Promise<any> {
     try {
-      console.log('\n🎯 [CONTEXT ITINERARY] Generating with full trip context');
-      
-      const { TRAVEL_TYPE_PREFERENCES, calculateDailyBudget } = await import('../types/tripContext.js');
-      
+      console.log("\n🎯 [CONTEXT ITINERARY] Generating with full trip context");
+
+      const { TRAVEL_TYPE_PREFERENCES, calculateDailyBudget } =
+        await import("../types/tripContext.js");
+
       // Calculate total days from cities
-      const totalDays = tripContext.cities.reduce((sum: number, city: any) => sum + city.days, 0);
-      
+      const totalDays = tripContext.cities.reduce(
+        (sum: number, city: any) => sum + city.days,
+        0,
+      );
+
       // Get daily budget breakdown
       const dailyBudget = calculateDailyBudget(
         tripContext.budget,
         tripContext.budgetMode,
-        totalDays
+        totalDays,
       );
-      
+
       // Get travel type preferences
-      const travelPrefs = TRAVEL_TYPE_PREFERENCES[tripContext.travelType as keyof typeof TRAVEL_TYPE_PREFERENCES];
-      
+      const travelPrefs =
+        TRAVEL_TYPE_PREFERENCES[
+          tripContext.travelType as keyof typeof TRAVEL_TYPE_PREFERENCES
+        ];
+
       // console.log('💰 Daily budget:', dailyBudget);
       // console.log('🎨 Travel preferences:', travelPrefs);
-      
+
       // Build itinerary for each city
       const allDays: any[] = [];
       let currentDayNumber = 1;
-      
+
       for (const city of tripContext.cities) {
-        console.log(`\n🏙️  Building itinerary for ${city.name} (${city.days} days)`);
-        
+        console.log(
+          `\n🏙️  Building itinerary for ${city.name} (${city.days} days)`,
+        );
+
         // Build city-specific itinerary with context
         const cityItinerary = await itineraryBuilder.buildItineraryWithContext(
           city.name,
@@ -884,9 +913,9 @@ Rules:
             activityLevel: travelPrefs.activityLevel,
             pacing: travelPrefs.pacing,
             numberOfPeople: tripContext.people,
-          }
+          },
         );
-        
+
         if (cityItinerary && cityItinerary.days) {
           // Renumber days for multi-city trips
           cityItinerary.days.forEach((day: any) => {
@@ -896,11 +925,11 @@ Rules:
           });
         }
       }
-      
+
       // Create complete itinerary
       const completeItinerary = {
         tripMetadata: {
-          destination: tripContext.cities.map((c: any) => c.name).join(' → '),
+          destination: tripContext.cities.map((c: any) => c.name).join(" → "),
           duration: totalDays,
           startDate: tripContext.startDate,
           travelType: tripContext.travelType,
@@ -908,29 +937,31 @@ Rules:
           budget: {
             total: tripContext.budget.total,
             perDay: dailyBudget.totalPerDay,
-            breakdown: dailyBudget
-          }
+            breakdown: dailyBudget,
+          },
         },
-        days: allDays
+        days: allDays,
       };
-      
+
       // Format the response
-      const formattedResponse = this.formatItineraryWithContext(completeItinerary, tripContext);
-      
-      console.log('✅ [CONTEXT ITINERARY] Successfully generated itinerary');
-      
+      const formattedResponse = this.formatItineraryWithContext(
+        completeItinerary,
+        tripContext,
+      );
+
+      console.log("✅ [CONTEXT ITINERARY] Successfully generated itinerary");
+
       return {
         response: formattedResponse,
         itinerary: completeItinerary,
-        error: null
+        error: null,
       };
-      
     } catch (error) {
-      console.error('❌ Error generating context itinerary:', error);
+      console.error("❌ Error generating context itinerary:", error);
       return {
         response: null,
         itinerary: null,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -940,17 +971,17 @@ Rules:
    */
   private formatItineraryWithContext(itinerary: any, tripContext: any): string {
     const { tripMetadata, days } = itinerary;
-    const cityNames = tripContext.cities.map((c: any) => c.name).join(' → ');
-    
+    const cityNames = tripContext.cities.map((c: any) => c.name).join(" → ");
+
     let response = `# 🗺️ Your ${tripMetadata.duration}-Day ${cityNames} Adventure\n\n`;
-    response += `I've crafted a personalized **${tripContext.travelType}** itinerary for ${tripContext.people} ${tripContext.people === 1 ? 'traveler' : 'travelers'}!\n\n`;
-    
+    response += `I've crafted a personalized **${tripContext.travelType}** itinerary for ${tripContext.people} ${tripContext.people === 1 ? "traveler" : "travelers"}!\n\n`;
+
     // Budget summary
     response += `## 💰 Budget Overview\n`;
     response += `- **Total Budget**: $${tripMetadata.budget.total.toLocaleString()}\n`;
     response += `- **Per Day**: $${Math.round(tripMetadata.budget.perDay).toLocaleString()}\n`;
     response += `- **Activities/Day**: $${Math.round(tripMetadata.budget.breakdown.activities).toLocaleString()}\n\n`;
-    
+
     response += `---\n\n`;
 
     // Group days by city for multi-city trips
@@ -972,25 +1003,30 @@ Rules:
         day.timeSlots.forEach((slot: any) => {
           if (slot.activities.length === 0) return;
 
-          const emoji = slot.period === 'morning' ? '☀️' : slot.period === 'afternoon' ? '🌆' : '🌙';
+          const emoji =
+            slot.period === "morning"
+              ? "☀️"
+              : slot.period === "afternoon"
+                ? "🌆"
+                : "🌙";
           response += `### ${emoji} ${slot.period.charAt(0).toUpperCase() + slot.period.slice(1)} (${slot.startTime}-${slot.endTime})\n\n`;
 
           slot.activities.forEach((activity: any, idx: number) => {
             response += `**${idx + 1}. ${activity.name}**\n`;
             response += `   ⏱️  Duration: ${activity.duration}\n`;
-            
+
             if (activity.estimatedCost) {
               response += `   💰 Cost: ${activity.estimatedCost}\n`;
             }
-            
+
             if (activity.category) {
               response += `   🏷️  Type: ${activity.category}\n`;
             }
-            
+
             if (activity.description) {
-              response += `   📝 ${activity.description.substring(0, 100)}${activity.description.length > 100 ? '...' : ''}\n`;
+              response += `   📝 ${activity.description.substring(0, 100)}${activity.description.length > 100 ? "..." : ""}\n`;
             }
-            
+
             response += `\n`;
           });
         });
@@ -999,17 +1035,23 @@ Rules:
       });
     });
 
-    const totalActivities = days.reduce((sum: number, day: any) => 
-      sum + day.timeSlots.reduce((s: number, slot: any) => s + slot.activities.length, 0), 0
+    const totalActivities = days.reduce(
+      (sum: number, day: any) =>
+        sum +
+        day.timeSlots.reduce(
+          (s: number, slot: any) => s + slot.activities.length,
+          0,
+        ),
+      0,
     );
-    
+
     response += `\n✨ Your itinerary includes **${totalActivities} activities** across **${days.length} days**!\n\n`;
     response += `🎯 Optimized for: **${tripContext.travelType} travel**\n`;
-    response += `👥 Perfect for: **${tripContext.people} ${tripContext.people === 1 ? 'person' : 'people'}**\n\n`;
+    response += `👥 Perfect for: **${tripContext.people} ${tripContext.people === 1 ? "person" : "people"}**\n\n`;
 
     return response;
   }
-} 
+}
 
 // Lazy singleton instance - only created when first accessed
 let _travelAgentInstance: TravelAgent | null = null;
@@ -1017,7 +1059,7 @@ let _travelAgentInstance: TravelAgent | null = null;
 export function getTravelAgent(): TravelAgent {
   if (!_travelAgentInstance) {
     _travelAgentInstance = new TravelAgent({
-      modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      modelName: process.env.OPENAI_MODEL || "gpt-4o-mini",
       temperature: 0.7,
     });
   }
