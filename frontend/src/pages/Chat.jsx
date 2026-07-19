@@ -9,8 +9,7 @@ import { parseItineraryFromMarkdown } from "../utils/itineraryParser";
 import axios from "axios";
 import { Plane, MapPin } from "lucide-react";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function Chat() {
   const [conversationId, setConversationId] = useState();
@@ -46,13 +45,10 @@ export default function Chat() {
         const data = JSON.parse(lastMessage);
 
         const shouldProcess =
-          !conversationId ||
-          data.conversationId === conversationId;
+          !conversationId || data.conversationId === conversationId;
 
         if (shouldProcess) {
-          console.log(
-            "[CHAT] Adding assistant message to UI"
-          );
+          console.log("[CHAT] Adding assistant message to UI");
 
           if (!conversationId && data.conversationId) {
             setConversationId(data.conversationId);
@@ -70,19 +66,12 @@ export default function Chat() {
           setIsLoading(false);
         }
       } catch (e) {
-        console.error(
-          "[CHAT] Failed to parse message:",
-          e
-        );
+        console.error("[CHAT] Failed to parse message:", e);
       }
 
       clearLastMessage();
     }
-  }, [
-    lastMessage,
-    conversationId,
-    clearLastMessage,
-  ]);
+  }, [lastMessage, conversationId, clearLastMessage]);
 
   // Handle errors from Socket.io
   useEffect(() => {
@@ -91,13 +80,10 @@ export default function Chat() {
         const data = JSON.parse(lastError);
 
         const shouldProcess =
-          !conversationId ||
-          data.conversationId === conversationId;
+          !conversationId || data.conversationId === conversationId;
 
         if (shouldProcess) {
-          console.error(
-            "[CHAT] Adding error message to UI"
-          );
+          console.error("[CHAT] Adding error message to UI");
 
           if (!conversationId && data.conversationId) {
             setConversationId(data.conversationId);
@@ -115,49 +101,33 @@ export default function Chat() {
           setIsLoading(false);
         }
       } catch (e) {
-        console.error(
-          "[CHAT] Failed to parse error:",
-          e
-        );
+        console.error("[CHAT] Failed to parse error:", e);
       }
 
       clearLastError();
     }
-  }, [
-    lastError,
-    conversationId,
-    clearLastError,
-  ]);
+  }, [lastError, conversationId, clearLastError]);
 
   // Parse itinerary when assistant message arrives
   useEffect(() => {
     const last = messages[messages.length - 1];
 
     if (last && last.role === "assistant") {
-      const parsed = parseItineraryFromMarkdown(
-        last.content
-      );
+      const parsed = parseItineraryFromMarkdown(last.content);
 
       if (parsed) {
-        console.log(
-          "[CHAT] Parsed itinerary:",
-          parsed
-        );
+        console.log("[CHAT] Parsed itinerary:", parsed);
 
         setCurrentItinerary(parsed);
 
-        const allActivities = parsed.days.flatMap(
-          (day) =>
-            day.timeSlots.flatMap(
-              (slot) => slot.activities
-            )
+        const allActivities = parsed.days.flatMap((day) =>
+          day.timeSlots.flatMap((slot) => slot.activities),
         );
 
         const locations = allActivities
           .filter(
             (activity) =>
-              activity.location.lat !== 0 &&
-              activity.location.lon !== 0
+              activity.location.lat !== 0 && activity.location.lon !== 0,
           )
           .map((activity) => ({
             lat: activity.location.lat,
@@ -185,45 +155,41 @@ export default function Chat() {
     setIsLoading(true);
 
     try {
+      const token = localStorage.getItem("traveltea_token");
 
-      const token = localStorage.getItem('traveltea_token');
-      
       if (!token) {
-        throw new Error('Not authenticated. Please log in.');
+        throw new Error("Not authenticated. Please log in.");
       }
 
-      const response = await axios.post(`${API_URL}/api/chat`, {
-        message,
-        conversationId,
-      }, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
+      const response = await axios.post(
+        `${API_URL}/api/chat`,
+        {
+          message,
+          conversationId,
         },
-      });
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
 
       // Set conversation ID if this is the first message
-      if (
-        !conversationId &&
-        response.data.conversationId
-      ) {
-        setConversationId(
-          response.data.conversationId
-        );
+      if (!conversationId && response.data.conversationId) {
+        setConversationId(response.data.conversationId);
       }
       // Note: AI response will come via Socket.io
       // The axios response is just for confirmation
     } catch (error) {
-      console.error(
-        "Send message error:",
-        error
-      );
+      console.error("Send message error:", error);
 
-      let errorMessage = 'Sorry, I had trouble processing your message. Please try again.';
-      
+      let errorMessage =
+        "Sorry, I had trouble processing your message. Please try again.";
+
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {
-          errorMessage = 'Please log in to continue chatting.';
+          errorMessage = "Please log in to continue chatting.";
         } else if (error.response?.data?.error) {
           errorMessage = error.response.data.error;
         }
@@ -252,10 +218,7 @@ export default function Chat() {
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
-              <Plane
-                className="text-white"
-                size={20}
-              />
+              <Plane className="text-white" size={20} />
             </div>
 
             <div>
@@ -266,15 +229,11 @@ export default function Chat() {
               <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    isConnected
-                      ? "bg-green-500"
-                      : "bg-red-500"
+                    isConnected ? "bg-green-500" : "bg-red-500"
                   }`}
                 />
 
-                {isConnected
-                  ? "Connected"
-                  : "Disconnected"}
+                {isConnected ? "Connected" : "Disconnected"}
               </p>
             </div>
           </div>
@@ -284,8 +243,7 @@ export default function Chat() {
               <MapPin size={16} />
 
               <span className="hidden sm:inline">
-                Session:{" "}
-                {conversationId.slice(0, 8)}
+                Session: {conversationId.slice(0, 8)}
                 ...
               </span>
             </div>
@@ -301,10 +259,7 @@ export default function Chat() {
             {messages.length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
-                  <Plane
-                    className="text-white"
-                    size={32}
-                  />
+                  <Plane className="text-white" size={32} />
                 </div>
 
                 <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">
@@ -312,10 +267,8 @@ export default function Chat() {
                 </h2>
 
                 <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-md mx-auto">
-                  I'm your AI travel assistant.
-                  Ask me about destinations,
-                  plan trips, or get
-                  recommendations!
+                  I'm your AI travel assistant. Ask me about destinations, plan
+                  trips, or get recommendations!
                 </p>
               </div>
             ) : (
@@ -327,15 +280,10 @@ export default function Chat() {
                     content={msg.content}
                     timestamp={msg.timestamp}
                     onViewItinerary={() => {
-                      const parsed =
-                        parseItineraryFromMarkdown(
-                          msg.content
-                        );
+                      const parsed = parseItineraryFromMarkdown(msg.content);
 
                       if (parsed) {
-                        setCurrentItinerary(
-                          parsed
-                        );
+                        setCurrentItinerary(parsed);
                         setIsItineraryOpen(true);
                       }
                     }}
@@ -345,9 +293,7 @@ export default function Chat() {
             )}
 
             {(isLoading || agentStatus) && (
-              <TypingIndicator
-                status={agentStatus}
-              />
+              <TypingIndicator status={agentStatus} />
             )}
 
             <div ref={messagesEndRef} />
@@ -355,9 +301,7 @@ export default function Chat() {
 
           <MessageInput
             onSend={handleSendMessage}
-            disabled={
-              isLoading || !isConnected
-            }
+            disabled={isLoading || !isConnected}
             placeholder={
               isConnected
                 ? "Ask me about your next trip..."
@@ -375,17 +319,14 @@ export default function Chat() {
       <ItineraryOverlay
         itinerary={currentItinerary}
         isOpen={isItineraryOpen}
-        onClose={() =>
-          setIsItineraryOpen(false)
-        }
+        onClose={() => setIsItineraryOpen(false)}
         onActivityClick={(activity) => {
           setMapLocations([
             {
               lat: activity.location.lat,
               lon: activity.location.lon,
               name: activity.name,
-              description:
-                activity.description,
+              description: activity.description,
             },
           ]);
         }}
