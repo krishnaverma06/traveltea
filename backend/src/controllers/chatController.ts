@@ -33,12 +33,16 @@ export async function sendMessage(req: Request, res: Response) {
     // Generate or use existing conversation ID
     const convId = conversationId || uuidv4();
     
-    // Find or create conversation
-    let conversation = await Conversation.findOne({ conversationId: convId });
-    
+    // Find or create conversation, scoped to the requesting user
+    let conversation = await Conversation.findOne({
+      conversationId: convId,
+      user: req.userId,
+    });
+
     if (!conversation) {
       conversation = new Conversation({
         conversationId: convId,
+        user: req.userId,
         messages: [],
         metadata: {},
       });
@@ -54,11 +58,11 @@ export async function sendMessage(req: Request, res: Response) {
     // Save user message
     await conversation.save();
 
-    // Emit progress to Socket.io client (both to room and all connected clients)
+    // Emit progress only to sockets that joined this conversation's room
     if (io) {
-      io.emit('agent:thinking', { 
+      io.to(convId).emit('agent:thinking', {
         status: 'Analyzing your request...',
-        conversationId: convId 
+        conversationId: convId
       });
     }
 
@@ -85,14 +89,14 @@ export async function sendMessage(req: Request, res: Response) {
     // Save AI message
     await conversation.save();
 
-    // Emit completion (broadcast to all clients - they'll filter by conversationId)
-    console.log('📡 [SOCKET] Broadcasting agent:response for conversation:', convId);
+    // Emit completion only to sockets that joined this conversation's room
+    console.log('📡 [SOCKET] Emitting agent:response for conversation:', convId);
     if (io) {
-      io.emit('agent:response', { 
+      io.to(convId).emit('agent:response', {
         message: aiResponse,
-        conversationId: convId 
+        conversationId: convId
       });
-      console.log('✅ [SOCKET] Event broadcast successfully');
+      console.log('✅ [SOCKET] Event emitted successfully');
     } else {
       console.error('❌ [SOCKET] Socket.io instance not available!');
     }
@@ -107,9 +111,9 @@ export async function sendMessage(req: Request, res: Response) {
   } catch (error) {
     console.error('Chat error:', error);
     
-    // Emit error to Socket.io
-    if (io) {
-      io.emit('agent:error', { 
+    // Emit error only to sockets that joined this conversation's room
+    if (io && req.body.conversationId) {
+      io.to(req.body.conversationId).emit('agent:error', {
         error: 'Failed to process your message',
         conversationId: req.body.conversationId
       });
@@ -129,7 +133,10 @@ export async function getConversation(req: Request, res: Response) {
   try {
     const { conversationId } = req.params;
 
-    const conversation = await Conversation.findOne({ conversationId });
+    const conversation = await Conversation.findOne({
+      conversationId,
+      user: req.userId,
+    });
 
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' });
@@ -157,7 +164,10 @@ export async function deleteConversation(req: Request, res: Response) {
   try {
     const { conversationId } = req.params;
 
-    const result = await Conversation.deleteOne({ conversationId });
+    const result = await Conversation.deleteOne({
+      conversationId,
+      user: req.userId,
+    });
 
     if (result.deletedCount === 0) {
       return res.status(404).json({ error: 'Conversation not found' });
@@ -173,7 +183,7 @@ export async function deleteConversation(req: Request, res: Response) {
 
 /**
  * GET /api/chat
- * List all conversations (for debugging/admin)
+ * List the authenticated user's conversations
  */
 export async function listConversations(req: Request, res: Response) {
   try {
@@ -181,13 +191,13 @@ export async function listConversations(req: Request, res: Response) {
     const skip = parseInt(req.query.skip as string) || 0;
 
     const conversations = await Conversation
-      .find()
+      .find({ user: req.userId })
       .sort({ updatedAt: -1 })
       .limit(limit)
       .skip(skip)
       .select('conversationId messages metadata createdAt updatedAt');
 
-    const total = await Conversation.countDocuments();
+    const total = await Conversation.countDocuments({ user: req.userId });
 
     return res.status(200).json({
       conversations,
