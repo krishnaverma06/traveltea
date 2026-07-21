@@ -56,6 +56,7 @@ export function useSocket(conversationId) {
         JSON.stringify({
           message: data.message,
           conversationId: data.conversationId,
+          itinerary: data.itinerary,
         })
       );
     });
