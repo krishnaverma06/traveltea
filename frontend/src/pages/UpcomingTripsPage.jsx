@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { isAfter, startOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useTrip } from "@/contexts/TripContext";
@@ -9,21 +10,16 @@ import {
   Sparkles,
   MapPin,
   Calendar,
-  DollarSign,
-  Users,
   ArrowRight,
   ArrowLeft,
   Loader2,
   AlertCircle,
   Trash2,
   Search,
-  Filter,
-  Heart,
   Eye,
-  Edit3,
 } from "lucide-react";
 
-const SavedTripsPage = () => {
+const UpcomingTripsPage = () => {
   const navigate = useNavigate();
   const { updateTripData } = useTrip();
 
@@ -39,11 +35,15 @@ const SavedTripsPage = () => {
   }, []);
 
   useEffect(() => {
-    // Filter trips based on search term
+    const today = startOfDay(new Date());
+    const upcoming = savedTrips
+      .filter((trip) => trip.startDate && isAfter(new Date(trip.startDate), today))
+      .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+
     if (!searchTerm.trim()) {
-      setFilteredTrips(savedTrips);
+      setFilteredTrips(upcoming);
     } else {
-      const filtered = savedTrips.filter(
+      const filtered = upcoming.filter(
         (trip) =>
           trip.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
           trip.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -62,23 +62,15 @@ const SavedTripsPage = () => {
 
       const token = getToken();
       if (!token) {
-        setError("Please log in to view saved trips");
+        setError("Please log in to view upcoming trips");
         return;
       }
 
       const response = await apiGetSavedTrips(token);
-      console.log(
-        "📊 SavedTripsPage - Fetched saved trips:",
-        response.savedTrips
-      );
-      console.log(
-        "📊 SavedTripsPage - First trip itinerary data:",
-        response.savedTrips?.[0]?.generatedItinerary
-      );
       setSavedTrips(response.savedTrips || []);
     } catch (err) {
       console.error("Error fetching saved trips:", err);
-      const errorMessage = err.message || "Failed to fetch saved trips";
+      const errorMessage = err.message || "Failed to fetch upcoming trips";
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -96,7 +88,6 @@ const SavedTripsPage = () => {
       const token = getToken();
       await apiDeleteSavedTrip(tripId, token);
 
-      // Remove from local state
       setSavedTrips((prev) => prev.filter((trip) => trip._id !== tripId));
       toast.success("Trip deleted successfully");
     } catch (err) {
@@ -109,20 +100,6 @@ const SavedTripsPage = () => {
 
   const handleViewTrip = async (savedTrip) => {
     try {
-      console.log(
-        "📊 SavedTripsPage - Loading trip with full itinerary:",
-        savedTrip
-      );
-      console.log(
-        "📊 SavedTripsPage - Generated itinerary:",
-        savedTrip.generatedItinerary
-      );
-      console.log(
-        "📊 SavedTripsPage - Days in itinerary:",
-        savedTrip.generatedItinerary?.days?.length
-      );
-
-      // Update trip context with saved trip data
       updateTripData({
         startDate: new Date(savedTrip.startDate),
         cities: savedTrip.cities,
@@ -134,7 +111,6 @@ const SavedTripsPage = () => {
         itineraryMarkdown: savedTrip.generatedItinerary?.markdown,
       });
 
-      // Navigate to itinerary page
       navigate("/itinerary");
       toast.success("Trip loaded successfully");
     } catch (error) {
@@ -168,6 +144,13 @@ const SavedTripsPage = () => {
     });
   };
 
+  const getDaysUntil = (dateString) => {
+    const today = startOfDay(new Date());
+    const start = startOfDay(new Date(dateString));
+    const diffDays = Math.round((start - today) / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/30 flex items-center justify-center">
@@ -176,9 +159,9 @@ const SavedTripsPage = () => {
             <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
             <div className="text-center">
               <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                Loading Your Saved Trips...
+                Loading Your Upcoming Trips...
               </h3>
-              <p className="text-gray-600">Fetching your travel memories</p>
+              <p className="text-gray-600">Checking what's ahead</p>
             </div>
           </div>
         </Card>
@@ -220,33 +203,25 @@ const SavedTripsPage = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate("/plan")}
+                onClick={() => navigate("/saved-trips")}
                 className="text-gray-600 hover:text-gray-900 hover:bg-white/50 backdrop-blur-sm transition-all duration-300 group"
               >
                 <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform duration-300" />
-                Back to Planning
+                Back to Saved Trips
               </Button>
               <div className="h-6 w-px bg-gradient-to-b from-transparent via-gray-300 to-transparent" />
               <div className="space-y-1">
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-                  My Saved Trips
+                  Upcoming Trips
                 </h1>
                 <p className="text-sm text-gray-600">
-                  {savedTrips.length}{" "}
-                  {savedTrips.length === 1 ? "trip" : "trips"} saved
+                  {filteredTrips.length}{" "}
+                  {filteredTrips.length === 1 ? "trip" : "trips"} coming up
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                onClick={() => navigate("/upcoming-trips")}
-                className="border-gray-200 text-gray-700 hover:bg-white/50 backdrop-blur-sm transition-all duration-300"
-              >
-                <Calendar className="w-4 h-4 mr-2" />
-                Upcoming Trips
-              </Button>
               <Button
                 onClick={() => navigate("/plan")}
                 className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
@@ -260,13 +235,13 @@ const SavedTripsPage = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Search and Filter */}
+        {/* Search */}
         <div className="mb-8">
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
-              placeholder="Search your trips..."
+              placeholder="Search your upcoming trips..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/50 backdrop-blur-sm"
@@ -278,22 +253,22 @@ const SavedTripsPage = () => {
         {filteredTrips.length === 0 ? (
           <Card className="p-12 text-center bg-white/80 backdrop-blur-sm border border-white/20 shadow-2xl rounded-3xl">
             <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <Heart className="w-10 h-10 text-white" />
+              <Calendar className="w-10 h-10 text-white" />
             </div>
             <h3 className="text-2xl font-semibold text-gray-900 mb-4">
-              {searchTerm ? "No trips found" : "No saved trips yet"}
+              {searchTerm ? "No trips found" : "No upcoming trips"}
             </h3>
             <p className="text-gray-600 mb-6 max-w-md mx-auto">
               {searchTerm
                 ? "Try adjusting your search terms"
-                : "Start planning your first trip and save it for future reference!"}
+                : "Plan a trip with a future start date and it will show up here!"}
             </p>
             {!searchTerm && (
               <Button
                 onClick={() => navigate("/plan")}
                 className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
               >
-                Plan Your First Trip
+                Plan Your Next Trip
               </Button>
             )}
           </Card>
@@ -310,7 +285,11 @@ const SavedTripsPage = () => {
                   <div className="absolute bottom-4 left-6 right-6">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="px-3 py-1 text-xs font-bold rounded-full bg-white/90 text-blue-600">
-                        Saved Trip
+                        {getDaysUntil(trip.startDate) === 0
+                          ? "Today"
+                          : `In ${getDaysUntil(trip.startDate)} day${
+                              getDaysUntil(trip.startDate) === 1 ? "" : "s"
+                            }`}
                       </span>
                       <span className="px-3 py-1 text-xs font-bold rounded-full bg-white/90 text-purple-600 capitalize">
                         {trip.travelType} Travel
@@ -419,4 +398,4 @@ const SavedTripsPage = () => {
   );
 };
 
-export default SavedTripsPage;
+export default UpcomingTripsPage;
