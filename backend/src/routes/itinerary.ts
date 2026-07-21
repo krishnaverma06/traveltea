@@ -1,8 +1,10 @@
 import express from 'express';
 import { TravelAgent } from '../agents/travel-agent.js';
 import type { TripContext } from '../types/tripContext.js';
+import auth from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(auth);
 
 /**
  * POST /api/itinerary/generate
