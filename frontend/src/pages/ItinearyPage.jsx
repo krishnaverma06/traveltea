@@ -228,28 +228,13 @@ const ItineraryPage = () => {
     );
   };
 
-  // Reliable image function using Picsum Photos
-  const getActivityImage = (activity, index = 0) => {
-    // Use backend image if available
+  // Returns a real photo URL when one exists, otherwise null so callers
+  // render a clean placeholder instead of a random/fake stock photo.
+  const getActivityImage = (activity) => {
     if (activity.imageUrl && activity.imageUrl.trim() !== "") {
       return activity.imageUrl;
     }
-
-    // Generate consistent image based on activity name hash
-    const hash = hashCode(activity.name || "activity");
-    const imageId = Math.abs(hash % 1000) + 1; // 1-1000 range
-    return `https://picsum.photos/id/${imageId}/800/600`;
-  };
-
-  // Simple hash function for consistent image selection
-  const hashCode = (str) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    return hash;
+    return null;
   };
 
   const getPeriodIcon = (period) => {
@@ -654,17 +639,18 @@ const ItineraryPage = () => {
                               <div className="flex">
                                 {/* Activity Image */}
                                 <div className="w-64 h-48 flex-shrink-0 relative overflow-hidden">
-                                  <img
-                                    src={getActivityImage(activity, actIndex)}
-                                    alt={activity.name}
-                                    className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
-                                    loading="lazy"
-                                    onError={(e) => {
-                                      const fallbackId =
-                                        Math.floor(Math.random() * 100) + 1;
-                                      e.target.src = `https://picsum.photos/id/${fallbackId}/800/600`;
-                                    }}
-                                  />
+                                  {getActivityImage(activity) ? (
+                                    <img
+                                      src={getActivityImage(activity)}
+                                      alt={activity.name}
+                                      className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center">
+                                      <MapPin className="w-8 h-8 text-blue-400" />
+                                    </div>
+                                  )}
                                   <div className="absolute top-3 right-3 flex gap-2">
                                     <button
                                       onClick={() =>
@@ -827,17 +813,18 @@ const ItineraryPage = () => {
                         {firstActivity && (
                           <div className="relative h-64 overflow-hidden">
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent z-10" />
-                            <img
-                              src={getActivityImage(firstActivity, index)}
-                              alt={day.title}
-                              className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
-                              loading="lazy"
-                              onError={(e) => {
-                                const fallbackId =
-                                  Math.floor(Math.random() * 100) + 1;
-                                e.target.src = `https://picsum.photos/id/${fallbackId}/800/600`;
-                              }}
-                            />
+                            {getActivityImage(firstActivity) ? (
+                              <img
+                                src={getActivityImage(firstActivity)}
+                                alt={day.title}
+                                className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center">
+                                <MapPin className="w-12 h-12 text-white/80" />
+                              </div>
+                            )}
 
                             {/* Title Overlay */}
                             <div className="absolute bottom-6 left-6 right-6 z-20">

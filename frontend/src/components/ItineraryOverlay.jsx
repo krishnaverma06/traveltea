@@ -145,9 +145,18 @@ export function ItineraryOverlay({ itinerary, onClose, onActivityClick }) {
                           className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group"
                         >
                           <div className="flex items-start gap-3">
-                            <span className="text-2xl">
-                              {getCategoryEmoji(activity.category)}
-                            </span>
+                            {activity.imageUrl ? (
+                              <img
+                                src={activity.imageUrl}
+                                alt={activity.name}
+                                className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <span className="text-2xl">
+                                {getCategoryEmoji(activity.category)}
+                              </span>
+                            )}
 
                             <div className="flex-1">
                               <div className="flex items-start justify-between gap-2">

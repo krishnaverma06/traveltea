@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,7 +17,7 @@ import {
   Edit2,
   Check,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, isAfter, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 
 const DatePicker = ({ selected, onSelect }) => {
@@ -41,14 +41,75 @@ const DatePicker = ({ selected, onSelect }) => {
   );
 };
 
-import { getToken, clearToken } from "@/lib/api";
+import {
+  getToken,
+  clearToken,
+  apiGetSavedTrips,
+  apiGetSearchSuggestions,
+} from "@/lib/api";
 
-const DashboardNav = () => {
+const DashboardNav = ({ updateTripData }) => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchBoxRef = React.useRef(null);
   const isAuthenticated = Boolean(getToken());
+
   const handleLogout = () => {
     clearToken();
     window.location.href = "/";
+  };
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSuggestions([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const token = getToken();
+    if (!token) return;
+
+    const controller = new AbortController();
+    setIsSearching(true);
+
+    const timer = setTimeout(() => {
+      apiGetSearchSuggestions(query, token, controller.signal)
+        .then((res) => setSuggestions(res.suggestions || []))
+        .catch((err) => {
+          if (err.name !== "AbortError") setSuggestions([]);
+        })
+        .finally(() => setIsSearching(false));
+    }, 350);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSuggestionClick = (suggestion) => {
+    setShowDropdown(false);
+    setSearchQuery("");
+    if (suggestion.type === "trip") {
+      navigate("/saved-trips");
+    } else {
+      updateTripData?.({ cities: [{ name: suggestion.title, days: 1 }] });
+      navigate("/plan");
+    }
   };
 
   return (
@@ -68,12 +129,16 @@ const DashboardNav = () => {
           </div>
 
           <div className="flex-1 max-w-2xl mx-8">
-            <div className="relative">
+            <div className="relative" ref={searchBoxRef}>
               <Input
                 type="text"
                 placeholder="Search destinations, trips, experiences..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setShowDropdown(true);
+                }}
+                onFocus={() => setShowDropdown(true)}
                 className="w-full h-11 pl-12 pr-4 text-base bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 rounded-full"
               />
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -91,6 +156,43 @@ const DashboardNav = () => {
                   />
                 </svg>
               </div>
+
+              {showDropdown && searchQuery.trim() && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden z-50">
+                  {isSearching ? (
+                    <div className="p-4 text-sm text-gray-500 text-center">
+                      Searching...
+                    </div>
+                  ) : suggestions.length === 0 ? (
+                    <div className="p-4 text-sm text-gray-500 text-center">
+                      No matches found
+                    </div>
+                  ) : (
+                    <ul>
+                      {suggestions.map((s) => (
+                        <li key={`${s.type}-${s.id}`}>
+                          <button
+                            onClick={() => handleSuggestionClick(s)}
+                            className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center justify-between gap-3 border-b border-gray-100 last:border-b-0"
+                          >
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">
+                                {s.title}
+                              </p>
+                              {s.subtitle && (
+                                <p className="text-xs text-gray-500">{s.subtitle}</p>
+                              )}
+                            </div>
+                            <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded-full bg-blue-50 text-blue-600 flex-shrink-0">
+                              {s.type === "trip" ? "Trip" : "Destination"}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -99,13 +201,13 @@ const DashboardNav = () => {
               variant="ghost"
               className="text-gray-600 hover:text-white hover:bg-gradient-to-r hover:from-blue-500/90 hover:to-pink-500/90 hover:backdrop-blur-sm px-4 py-2 transition-all duration-300"
             >
-              Explore
+              <Link to="/explore">Explore</Link>
             </Button>
             <Button
               variant="ghost"
               className="text-gray-600 hover:text-white hover:bg-gradient-to-r hover:from-pink-500/90 hover:to-blue-500/90 hover:backdrop-blur-sm px-4 py-2 transition-all duration-300"
             >
-              Trips
+              <Link to="/trips">Trips</Link>
             </Button>
             <Button
               variant="ghost"
@@ -142,11 +244,26 @@ const DashboardNav = () => {
   );
 };
 
-const QuickStats = () => {
+const QuickStats = ({ savedTrips = [] }) => {
+  const upcomingTrips = savedTrips.filter(
+    (t) => t.startDate && isAfter(new Date(t.startDate), startOfDay(new Date()))
+  ).length;
+
+  const citiesVisited = new Set(
+    savedTrips.flatMap((t) => t.cities?.map((c) => c.name) || [])
+  ).size;
+
+  const daysTraveled = savedTrips.reduce(
+    (sum, t) =>
+      sum +
+      (t.totalDays || t.cities?.reduce((s, c) => s + c.days, 0) || 0),
+    0
+  );
+
   const stats = [
-    { label: "Upcoming Trips", value: "2", icon: CalendarIcon },
-    { label: "Cities Visited", value: "12", icon: MapPin },
-    { label: "Days Traveled", value: "45", icon: Plane },
+    { label: "Upcoming Trips", value: String(upcomingTrips), icon: CalendarIcon },
+    { label: "Cities Visited", value: String(citiesVisited), icon: MapPin },
+    { label: "Days Traveled", value: String(daysTraveled), icon: Plane },
   ];
 
   return (
@@ -616,6 +733,15 @@ const TripBuilder = ({ onStartPlanning, tripData, updateTripData }) => {
 export default function TripPlannerPage() {
   const navigate = useNavigate();
   const { tripData, updateTripData } = useTrip();
+  const [savedTrips, setSavedTrips] = useState([]);
+
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    apiGetSavedTrips(token, { limit: 1000 })
+      .then((res) => setSavedTrips(res.savedTrips || []))
+      .catch(() => {});
+  }, []);
 
   const handleStartPlanning = (data) => {
     updateTripData(data);
@@ -649,7 +775,7 @@ export default function TripPlannerPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <DashboardNav />
+      <DashboardNav updateTripData={updateTripData} />
       <div className="flex">
         <TripPlanningSidebar
           currentStep="destinations"
@@ -659,7 +785,7 @@ export default function TripPlannerPage() {
 
         <div className="flex-1">
           <main className="container mx-auto px-4 py-8 max-w-6xl">
-            <QuickStats />
+            <QuickStats savedTrips={savedTrips} />
             <TripBuilder
               onStartPlanning={handleStartPlanning}
               tripData={tripData}

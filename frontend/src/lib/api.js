@@ -118,6 +118,32 @@ export async function apiDeleteSavedTrip(id, token) {
   });
 }
 
+export async function apiGetSearchSuggestions(q, token, signal) {
+  const queryParams = new URLSearchParams({ q }).toString();
+  return request(`/api/search/suggestions?${queryParams}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  });
+}
+
+export async function apiGetExploreDestinations(params = {}) {
+  const queryParams = new URLSearchParams(params).toString();
+  const url = queryParams
+    ? `/api/explore/destinations?${queryParams}`
+    : "/api/explore/destinations";
+  return request(url);
+}
+
+export async function apiGetExploreTrending() {
+  return request("/api/explore/trending");
+}
+
+export async function apiGetExploreRecommendations(token) {
+  return request("/api/explore/recommendations", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export async function apiCheckTripSaved(params, token) {
   const queryParams = new URLSearchParams(params).toString();
   return request(`/api/saved-trips/check?${queryParams}`, {
