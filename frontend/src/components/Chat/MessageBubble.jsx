@@ -1,10 +1,15 @@
 import { motion } from "framer-motion";
 import { User, Bot, Calendar } from "lucide-react";
-import { containsItinerary } from "../../utils/itineraryParser";
 
-export function MessageBubble({ role, content, timestamp, onViewItinerary }) {
+export function MessageBubble({
+  role,
+  content,
+  timestamp,
+  itinerary,
+  onViewItinerary,
+}) {
   const isUser = role === "user";
-  const hasItinerary = !isUser && containsItinerary(content);
+  const hasItinerary = !isUser && !!itinerary;
 
   return (
     <motion.div

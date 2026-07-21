@@ -5,7 +5,6 @@ import { TypingIndicator } from "../components/Chat/TypingIndicator";
 import { MessageInput } from "../components/Chat/MessageInput";
 import { Map } from "../components/Map";
 import { ItineraryOverlay } from "../components/ItineraryOverlay";
-import { parseItineraryFromMarkdown } from "../utils/itineraryParser";
 import axios from "axios";
 import { Plane, MapPin } from "lucide-react";
 
@@ -24,6 +23,7 @@ export default function Chat() {
   const [currentItinerary, setCurrentItinerary] = useState(null);
   const [isItineraryOpen, setIsItineraryOpen] = useState(false);
   const [mapLocations, setMapLocations] = useState([]);
+  const [focusedLocation, setFocusedLocation] = useState(null);
 
   const {
     isConnected,
@@ -63,6 +63,7 @@ export default function Chat() {
               role: "assistant",
               content: data.message,
               timestamp: new Date(),
+              itinerary: data.itinerary || null,
             },
           ]);
 
@@ -111,37 +112,35 @@ export default function Chat() {
     }
   }, [lastError, conversationId, clearLastError]);
 
-  // Parse itinerary when assistant message arrives
+  // Load the real itinerary (with real coordinates) when an assistant
+  // message carries one, and show every activity on the map at once.
   useEffect(() => {
     const last = messages[messages.length - 1];
 
-    if (last && last.role === "assistant") {
-      const parsed = parseItineraryFromMarkdown(last.content);
+    if (last && last.role === "assistant" && last.itinerary) {
+      console.log("[CHAT] Itinerary received:", last.itinerary);
 
-      if (parsed) {
-        console.log("[CHAT] Parsed itinerary:", parsed);
+      setCurrentItinerary(last.itinerary);
 
-        setCurrentItinerary(parsed);
+      const allActivities = last.itinerary.days.flatMap((day) =>
+        day.timeSlots.flatMap((slot) => slot.activities),
+      );
 
-        const allActivities = parsed.days.flatMap((day) =>
-          day.timeSlots.flatMap((slot) => slot.activities),
-        );
+      const locations = allActivities
+        .filter(
+          (activity) =>
+            typeof activity.location?.lat === "number" &&
+            typeof activity.location?.lon === "number",
+        )
+        .map((activity) => ({
+          lat: activity.location.lat,
+          lon: activity.location.lon,
+          name: activity.name,
+          description: activity.category,
+        }));
 
-        const locations = allActivities
-          .filter(
-            (activity) =>
-              activity.location.lat !== 0 && activity.location.lon !== 0,
-          )
-          .map((activity) => ({
-            lat: activity.location.lat,
-            lon: activity.location.lon,
-            name: activity.name,
-            description: activity.category,
-          }));
-
-        if (locations.length > 0) {
-          setMapLocations(locations);
-        }
+      if (locations.length > 0) {
+        setMapLocations(locations);
       }
     }
   }, [messages]);
@@ -256,84 +255,81 @@ export default function Chat() {
 
       {/* Split View */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Chat */}
-        <div className="w-[35%] flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
-          <div className="flex-1 overflow-y-auto px-6 py-6">
-            {messages.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
-                  <Plane className="text-white" size={32} />
-                </div>
-
-                <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">
-                  Where would you like to go?
-                </h2>
-
-                <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-md mx-auto">
-                  I'm your AI travel assistant. Ask me about destinations, plan
-                  trips, or get recommendations!
-                </p>
-              </div>
-            ) : (
-              <>
-                {messages.map((msg, index) => (
-                  <MessageBubble
-                    key={index}
-                    role={msg.role}
-                    content={msg.content}
-                    timestamp={msg.timestamp}
-                    onViewItinerary={() => {
-                      const parsed = parseItineraryFromMarkdown(msg.content);
-
-                      if (parsed) {
-                        setCurrentItinerary(parsed);
-                        setIsItineraryOpen(true);
-                      }
-                    }}
-                  />
-                ))}
-              </>
-            )}
-
-            {(isLoading || agentStatus) && (
-              <TypingIndicator status={agentStatus} />
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          <MessageInput
-            onSend={handleSendMessage}
-            disabled={isLoading || !isConnected}
-            placeholder={
-              isConnected
-                ? "Ask me about your next trip..."
-                : "Connecting to server..."
-            }
+        {isItineraryOpen && currentItinerary ? (
+          /* Itinerary — shares the screen with the map instead of covering it */
+          <ItineraryOverlay
+            itinerary={currentItinerary}
+            onClose={() => setIsItineraryOpen(false)}
+            onActivityClick={(activity) => {
+              setFocusedLocation({
+                lat: activity.location.lat,
+                lon: activity.location.lon,
+              });
+            }}
           />
-        </div>
+        ) : (
+          /* Chat */
+          <div className="w-[35%] flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
+            <div className="flex-1 overflow-y-auto px-6 py-6">
+              {messages.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
+                    <Plane className="text-white" size={32} />
+                  </div>
+
+                  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">
+                    Where would you like to go?
+                  </h2>
+
+                  <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-md mx-auto">
+                    I'm your AI travel assistant. Ask me about destinations,
+                    plan trips, or get recommendations!
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {messages.map((msg, index) => (
+                    <MessageBubble
+                      key={index}
+                      role={msg.role}
+                      content={msg.content}
+                      timestamp={msg.timestamp}
+                      itinerary={msg.itinerary}
+                      onViewItinerary={() => {
+                        if (msg.itinerary) {
+                          setCurrentItinerary(msg.itinerary);
+                          setIsItineraryOpen(true);
+                        }
+                      }}
+                    />
+                  ))}
+                </>
+              )}
+
+              {(isLoading || agentStatus) && (
+                <TypingIndicator status={agentStatus} />
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            <MessageInput
+              onSend={handleSendMessage}
+              disabled={isLoading || !isConnected}
+              placeholder={
+                isConnected
+                  ? "Ask me about your next trip..."
+                  : "Connecting to server..."
+              }
+            />
+          </div>
+        )}
 
         {/* Map */}
-        <div className="w-[65%] relative bg-gray-50 dark:bg-gray-900">
-          <Map locations={mapLocations} />
+        <div className="w-[65%] relative isolate bg-gray-50 dark:bg-gray-900">
+          <Map locations={mapLocations} focus={focusedLocation} />
         </div>
       </div>
-
-      <ItineraryOverlay
-        itinerary={currentItinerary}
-        isOpen={isItineraryOpen}
-        onClose={() => setIsItineraryOpen(false)}
-        onActivityClick={(activity) => {
-          setMapLocations([
-            {
-              lat: activity.location.lat,
-              lon: activity.location.lon,
-              name: activity.name,
-              description: activity.description,
-            },
-          ]);
-        }}
-      />
     </div>
   );
 }
