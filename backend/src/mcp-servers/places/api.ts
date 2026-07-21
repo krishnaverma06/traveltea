@@ -17,6 +17,18 @@ dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 // OpenTripMap API - Get free key at https://opentripmap.io/product
 const BASE_URL = "https://api.opentripmap.com/0.1/en/places";
 
+// OpenTripMap's preview.source is often a Wikimedia "thumb" URL at an
+// arbitrary width (e.g. "/400px-Name.jpg"). Wikimedia's thumbnail service
+// now rejects most non-standard widths with a 400, so we rewrite it to the
+// original full-resolution file, which always loads.
+function normalizeWikimediaImageUrl(url: string | undefined): string | undefined {
+  if (!url) return url;
+  const match = url.match(
+    /^(https?:\/\/upload\.wikimedia\.org\/wikipedia\/\w+)\/thumb\/(.+)\/\d+px-[^/]+$/,
+  );
+  return match ? `${match[1]}/${match[2]}` : url;
+}
+
 // ---------------------------------------------------------------------------
 // Centralized rate limiting
 //
@@ -363,8 +375,33 @@ export class OpenTripMapAPI {
       },
       category: details.kinds ? details.kinds.split(",") : [],
       rating: details.rate,
-      image: details.preview?.source || details.image,
+      image: normalizeWikimediaImageUrl(details.preview?.source || details.image),
     };
+  }
+
+  /**
+   * Enrich the first `cap` destinations with a real photo/description via
+   * getEnrichedPlaceDetails, leaving the rest (and any lookup misses)
+   * without an image so callers can show a placeholder instead of a fake
+   * photo. Bounded because each lookup is a separate throttled API call.
+   */
+  async enrichWithPhotos(
+    destinations: Destination[],
+    cap: number = 12,
+  ): Promise<Destination[]> {
+    const toEnrich = destinations.slice(0, cap);
+    const rest = destinations.slice(cap);
+
+    const enriched = await Promise.all(
+      toEnrich.map(async (destination) => {
+        const details = await this.getEnrichedPlaceDetails(destination.id);
+        return details?.image
+          ? { ...destination, image: details.image, description: details.description }
+          : destination;
+      }),
+    );
+
+    return [...enriched, ...rest];
   }
 }
 
