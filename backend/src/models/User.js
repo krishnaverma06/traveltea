@@ -22,6 +22,15 @@ const userSchema = new mongoose.Schema(
       minlength: 6,
       select: false,
     },
+    bio: {
+      type: String,
+      maxlength: 500,
+      default: "",
+    },
+    notifications: {
+      type: Boolean,
+      default: true,
+    },
     preferences: {
       budget: {
         type: String,

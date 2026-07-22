@@ -191,6 +191,25 @@ export class OpenTripMapAPI {
   }
 
   /**
+   * Resolve a city/place name to its ISO country code via OpenTripMap's
+   * geoname endpoint (same lookup searchPlaces already does internally).
+   */
+  async getCityCountryCode(query: string): Promise<string | null> {
+    try {
+      const geoResponse = await withRetry(
+        () =>
+          axios.get(`${BASE_URL}/geoname`, {
+            params: { name: query, apikey: this.apiKey },
+          }),
+        `geoname-country("${query}")`,
+      );
+      return geoResponse.data?.country || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
    * Search places by category (museums, restaurants, nature, etc.)
    * Useful for building diverse itineraries.
    */
