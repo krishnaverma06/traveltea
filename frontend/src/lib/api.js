@@ -40,6 +40,29 @@ export async function apiMe(token) {
   });
 }
 
+export async function apiUpdateProfile(payload, token) {
+  return request("/api/auth/profile", {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function apiUpdatePreferences(payload, token) {
+  return request("/api/auth/preferences", {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function apiDeleteAccount(token) {
+  return request("/api/auth/account", {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export function saveToken(token) {
   localStorage.setItem("traveltea_token", token);
 }

@@ -4,6 +4,7 @@ const citySchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     days: { type: Number, required: true, min: 1 },
+    country: { type: String, trim: true },
   },
   { _id: false }
 );

@@ -227,7 +227,10 @@ const DashboardNav = ({ updateTripData }) => {
             {/* </div> */}
 
             {isAuthenticated && (
-              <div className="ml-4">
+              <div className="ml-4 flex items-center gap-2">
+                <Button variant="ghost" className="px-4">
+                  <Link to="/profile">Profile</Link>
+                </Button>
                 <Button
                   variant="outline"
                   onClick={handleLogout}

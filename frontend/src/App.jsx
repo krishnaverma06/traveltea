@@ -22,6 +22,7 @@ import SavedTripsPage from "./pages/SavedTripsPage";
 import UpcomingTripsPage from "./pages/UpcomingTripsPage";
 import TripsPage from "./pages/TripsPage";
 import ExplorePage from "./pages/ExplorePage";
+import ProfilePage from "./pages/ProfilePage";
 
 const ProtectedRoute = ({
   children,
@@ -130,6 +131,14 @@ const AppContent = () => {
           element={
             <ProtectedRoute>
               <ExplorePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
             </ProtectedRoute>
           }
         />

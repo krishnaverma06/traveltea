@@ -1,8 +1,22 @@
 import SavedTrip from "../models/SavedTrip.js";
+import { getOpenTripMapAPI } from "../mcp-servers/places/api.js";
 
 // Escape regex metacharacters so user-supplied search text can't be used
 // to build unexpected/expensive patterns.
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Best-effort: resolve each city's country code for trip stats. Failures
+// are non-fatal — cities just end up without a country and are skipped
+// when counting countries visited.
+const resolveCityCountries = async (cities) => {
+  return Promise.all(
+    cities.map(async (city) => {
+      if (city.country) return city;
+      const country = await getOpenTripMapAPI().getCityCountryCode(city.name);
+      return country ? { ...city, country } : city;
+    })
+  );
+};
 
 // Save a trip
 export const saveTrip = async (req, res) => {
@@ -47,12 +61,13 @@ export const saveTrip = async (req, res) => {
     }
 
     // Create the saved trip
+    const citiesWithCountry = await resolveCityCountries(cities);
     const savedTrip = new SavedTrip({
       user: req.userId,
       title,
       description,
       startDate: new Date(startDate),
-      cities,
+      cities: citiesWithCountry,
       totalDays,
       people,
       travelType,
