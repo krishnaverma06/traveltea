@@ -117,6 +117,13 @@ export async function apiGetSavedTrips(token, params = {}) {
   });
 }
 
+export async function apiSearchSavedTrips(query, token) {
+  const queryParams = new URLSearchParams({ q: query }).toString();
+  return request(`/api/saved-trips/search?${queryParams}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export async function apiGetSavedTrip(id, token) {
   return request(`/api/saved-trips/${id}`, {
     headers: { Authorization: `Bearer ${token}` },

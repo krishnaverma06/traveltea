@@ -51,7 +51,8 @@ const ItineraryPage = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
-  const itinerary = tripData?.generatedItinerary?.itinerary;
+  // Support both newly generated trips (nested under .itinerary) and saved trips (direct)
+  const itinerary = tripData?.generatedItinerary?.itinerary || tripData?.generatedItinerary;
 
   console.log("📊 ItineraryPage - tripData:", tripData);
   console.log("📊 ItineraryPage - itinerary:", itinerary);

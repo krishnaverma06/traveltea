@@ -7,6 +7,14 @@
 
 import { VectorDocumentCategory, KnowledgeSourceType } from './vector.types.js';
 
+// ─── Embedding Metadata Defaults ───────────────────────────────────────────────
+
+/** Default model used for vector embeddings */
+export const DEFAULT_EMBEDDING_MODEL = 'models/text-embedding-004'; // Also maps to gemini-embedding-2
+
+/** Version identifier for the embedding generation strategy */
+export const DEFAULT_EMBEDDING_VERSION = 'v1.0.0';
+
 // ─── Collection & Index ────────────────────────────────────────────────────────
 
 /** MongoDB collection name for vector documents */

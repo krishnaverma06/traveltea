@@ -43,6 +43,22 @@ export enum KnowledgeSourceType {
   SEARCH_KNOWLEDGE = 'search_knowledge',
   /** Rich documents auto-generated from saved user itineraries */
   USER_TRIPS = 'user_trips',
+  /** Aggregated semantic profile summarizing user preferences and behavior */
+  USER_PROFILE = 'user_profile',
+}
+
+// ─── Chunk Types ───────────────────────────────────────────────────────────────
+
+/**
+ * Identifies the type of chunk for semantically split documents.
+ */
+export enum ChunkType {
+  SUMMARY = 'summary',
+  ITINERARY_DAY = 'itinerary_day',
+  HOTEL = 'hotel',
+  RESTAURANT = 'restaurant',
+  ACTIVITY = 'activity',
+  TRANSPORT = 'transport',
 }
 
 // ─── Metadata ──────────────────────────────────────────────────────────────────
@@ -83,6 +99,19 @@ export interface IVectorDocumentMetadata {
   estimatedCost?: string;
   /** Applicable travel types */
   travelTypes?: string[];
+
+  // ── Extended Metadata (Rich filtering for RAG) ──────────────
+  continent?: string;
+  state?: string;
+  timezone?: string;
+  tripStyle?: string;
+  budgetTier?: string;
+  travelSeason?: string;
+  travelCompanions?: string;
+  durationCategory?: string;
+  destinationType?: string;
+  activityTypes?: string[];
+
   /** Any extra key-value pairs */
   [key: string]: unknown;
 }
@@ -136,6 +165,32 @@ export interface IVectorDocument {
   generatedFrom?: string;
   /** Access control: public (search knowledge) or private (user trips) */
   privacy?: 'public' | 'private';
+  // ── Chunking Information ──────────────
+  chunkType?: ChunkType;
+  chunkIndex?: number;
+  totalChunks?: number;
+
+  // ── Embedding Metadata ──────────────
+  embeddingModel?: string;
+  embeddingVersion?: string;
+  embeddingDimension?: number;
+  embeddingCreatedAt?: Date;
+
+  // ── Semantic Relationships ──────────────
+  relatedDestinations?: string[];
+  relatedCountries?: string[];
+  relatedActivities?: string[];
+  relatedTripStyles?: string[];
+  relatedCategories?: string[];
+  parentDocument?: string; // ObjectId as string
+  childDocuments?: string[]; // ObjectId as string
+
+  // ── Vector Lifecycle Management ──────────────
+  lastAccessed?: Date;
+  expiresAt?: Date;
+  archived?: boolean;
+  accessCount?: number;
+
   /** Document version for optimistic update tracking */
   version?: number;
 

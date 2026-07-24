@@ -1,76 +1,118 @@
 /**
  * Trip Knowledge Service
  *
- * Automatically ingests rich semantic knowledge documents
- * whenever users save itineraries. These documents represent
- * complete user trips and can be used for personalization
- * and advanced AI insights in the future.
+ * Automatically ingests rich semantic knowledge documents whenever users save itineraries.
+ * Implements Semantic Chunking: splits a large trip into Summary, Days, Hotels, and Activities
+ * for precise retrieval in future RAG systems.
  *
  * Runs asynchronously (fire-and-forget) — never blocks the save response.
- * Reuses the existing embedding service from services/embedding.ts.
  */
 
 import { VectorDocument } from '../models/VectorDocument.js';
-import { VectorDocumentCategory, KnowledgeSourceType } from '../types/vector.types.js';
+import { VectorDocumentCategory, KnowledgeSourceType, ChunkType } from '../types/vector.types.js';
 import type { TripKnowledgeInput } from '../types/vector.types.js';
 import { generateContentHash } from '../utils/content.utils.js';
+import { inferBudgetTier } from '../utils/metadata.utils.js';
 import { generateDocumentEmbedding } from './vector-embedding.service.js';
 import Logger from '../../utils/logger.js';
 
 const logger = new Logger('TripKnowledge');
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
+// ─── Document Builders ─────────────────────────────────────────────────────────
+
+interface TripChunk {
+  chunkType: ChunkType;
+  chunkIndex: number;
+  title: string;
+  category: VectorDocumentCategory;
+  content: string;
+}
 
 /**
- * Build a rich text representation of a user's saved trip.
+ * Split a trip into semantic chunks (Summary, Days, Hotels, Activities).
  */
-function buildTripContent(input: TripKnowledgeInput): string {
+function buildTripChunks(input: TripKnowledgeInput): TripChunk[] {
   const trip = input.tripDoc;
-  const parts: string[] = [];
+  const chunks: TripChunk[] = [];
+  let chunkIndex = 0;
 
-  // Title and Description
-  parts.push(`Trip Title: ${trip.title}.`);
-  if (trip.description) {
-    parts.push(`Description: ${trip.description}.`);
-  }
+  const budgetTier = inferBudgetTier(trip.budget);
 
-  // Logistics
-  parts.push(`Travel Type: ${trip.travelType}.`);
-  parts.push(`People: ${trip.people}.`);
-  parts.push(`Duration: ${trip.totalDays} days.`);
-  parts.push(`Budget Level: ${trip.budget}.`);
-
-  // Destinations
+  // 1. Summary Chunk
+  const summaryParts = [
+    `Trip Summary: ${trip.title}.`,
+    trip.description ? `Description: ${trip.description}.` : '',
+    `Travel Type: ${trip.travelType}.`,
+    `People: ${trip.people}. Duration: ${trip.totalDays} days. Budget: ${budgetTier}.`,
+  ];
   if (trip.cities && trip.cities.length > 0) {
     const cityList = trip.cities.map((c: any) => `${c.name} (${c.country || 'Unknown'})`).join(', ');
-    parts.push(`Destinations visited: ${cityList}.`);
+    summaryParts.push(`Destinations: ${cityList}.`);
+  }
+  chunks.push({
+    chunkType: ChunkType.SUMMARY,
+    chunkIndex: chunkIndex++,
+    title: `${trip.title} - Summary`,
+    category: VectorDocumentCategory.ITINERARY,
+    content: summaryParts.filter(Boolean).join('\n'),
+  });
+
+  if (!trip.generatedItinerary || !trip.generatedItinerary.days) {
+    return chunks;
   }
 
-  // Itinerary Highlights
-  if (trip.generatedItinerary && trip.generatedItinerary.days) {
-    parts.push(`Highlights:`);
-    trip.generatedItinerary.days.forEach((day: any) => {
-      parts.push(`- Day ${day.dayNumber} in ${day.city}:`);
-      
-      if (day.activities && day.activities.length > 0) {
-        const activities = day.activities
-          .map((a: any) => `${a.name} (${a.category})`)
-          .join(', ');
-        parts.push(`  Activities include ${activities}.`);
-      }
-      
-      if (day.hotel && day.hotel.name) {
-        parts.push(`  Stayed at ${day.hotel.name}.`);
-      }
+  const allHotels = new Set<string>();
+  const allActivities = new Set<string>();
+
+  // 2. Daily Chunks
+  trip.generatedItinerary.days.forEach((day: any) => {
+    const dayParts = [`Day ${day.dayNumber} in ${day.city}:`];
+    
+    if (day.hotel && day.hotel.name) {
+      dayParts.push(`Accommodation: ${day.hotel.name}.`);
+      allHotels.add(day.hotel.name);
+    }
+
+    if (day.activities && day.activities.length > 0) {
+      dayParts.push('Activities:');
+      day.activities.forEach((a: any) => {
+        dayParts.push(`- ${a.name} (${a.category})`);
+        allActivities.add(`${a.name} (${a.category})`);
+      });
+    }
+
+    chunks.push({
+      chunkType: ChunkType.ITINERARY_DAY,
+      chunkIndex: chunkIndex++,
+      title: `${trip.title} - Day ${day.dayNumber}`,
+      category: VectorDocumentCategory.ITINERARY,
+      content: dayParts.join('\n'),
+    });
+  });
+
+  // 3. Hotel Chunk (if multiple)
+  if (allHotels.size > 0) {
+    chunks.push({
+      chunkType: ChunkType.HOTEL,
+      chunkIndex: chunkIndex++,
+      title: `${trip.title} - Accommodations`,
+      category: VectorDocumentCategory.HOTEL,
+      content: `Accommodations booked for this trip:\n` + Array.from(allHotels).map(h => `- ${h}`).join('\n'),
     });
   }
 
-  // Tags
-  if (trip.tags && trip.tags.length > 0) {
-    parts.push(`Travel Tags: ${trip.tags.join(', ')}.`);
+  // 4. Activities Chunk (if multiple)
+  if (allActivities.size > 0) {
+    chunks.push({
+      chunkType: ChunkType.ACTIVITY,
+      chunkIndex: chunkIndex++,
+      title: `${trip.title} - Activities`,
+      category: VectorDocumentCategory.ACTIVITY,
+      content: `All activities planned for this trip:\n` + Array.from(allActivities).map(a => `- ${a}`).join('\n'),
+    });
   }
 
-  return parts.join('\n');
+  return chunks;
 }
 
 /**
@@ -82,7 +124,7 @@ function buildTripTags(input: TripKnowledgeInput): string[] {
 
   tags.add('user trip');
   tags.add(trip.travelType?.toLowerCase() || 'travel');
-  tags.add(trip.budget?.toLowerCase() || 'budget');
+  tags.add(inferBudgetTier(trip.budget).toLowerCase());
 
   if (trip.tags) {
     trip.tags.forEach((t: string) => tags.add(t.toLowerCase()));
@@ -109,53 +151,62 @@ function buildTripTags(input: TripKnowledgeInput): string[] {
  */
 export async function ingestTripKnowledge(tripDoc: any, userId: string): Promise<void> {
   try {
-    const input: TripKnowledgeInput = {
-      tripDoc,
-      userId,
-    };
-
-    const content = buildTripContent(input);
-    const contentHash = generateContentHash(content);
+    const input: TripKnowledgeInput = { tripDoc, userId };
+    const chunks = buildTripChunks(input);
     const tags = buildTripTags(input);
 
     const mainCity = tripDoc.cities && tripDoc.cities.length > 0 ? tripDoc.cities[0].name : 'Multiple';
     const mainCountry = tripDoc.cities && tripDoc.cities.length > 0 ? tripDoc.cities[0].country || 'Unknown' : 'Multiple';
 
-    // Generate embedding
-    const embedding = await generateDocumentEmbedding({
-      title: tripDoc.title,
-      category: VectorDocumentCategory.ITINERARY,
-      country: mainCountry,
-      city: mainCity,
-      tags,
-      content,
-      source: 'user_trip',
-    });
+    let parentDocumentId: any = null;
 
-    // Insert vector document
-    await VectorDocument.create({
-      title: tripDoc.title,
-      category: VectorDocumentCategory.ITINERARY,
-      country: mainCountry,
-      city: mainCity,
-      tags,
-      content,
-      contentHash,
-      embedding,
-      source: 'user_trip',
-      sourceType: KnowledgeSourceType.USER_TRIPS,
-      userId: userId,
-      tripId: tripDoc._id.toString(),
-      privacy: tripDoc.isPublic ? 'public' : 'private',
-      version: 1,
-      metadata: {
-        travelTypes: [tripDoc.travelType],
-        estimatedCost: tripDoc.budget,
-        duration: `${tripDoc.totalDays} days`,
-      },
-    });
+    // We process chunks sequentially to establish parent-child relationship
+    for (const chunk of chunks) {
+      const contentHash = generateContentHash(chunk.content);
+      
+      const embedding = await generateDocumentEmbedding({
+        title: chunk.title,
+        category: chunk.category,
+        country: mainCountry,
+        city: mainCity,
+        tags,
+        content: chunk.content,
+        source: 'user_trip',
+      });
 
-    logger.info(`Trip knowledge ingested for trip: "${tripDoc.title}" (${tripDoc._id})`);
+      const doc = await VectorDocument.create({
+        title: chunk.title,
+        category: chunk.category,
+        country: mainCountry,
+        city: mainCity,
+        tags,
+        content: chunk.content,
+        contentHash,
+        embedding,
+        source: 'user_trip',
+        sourceType: KnowledgeSourceType.USER_TRIPS,
+        userId: userId,
+        tripId: tripDoc._id.toString(),
+        privacy: tripDoc.isPublic ? 'public' : 'private',
+        version: 1,
+        chunkType: chunk.chunkType,
+        chunkIndex: chunk.chunkIndex,
+        totalChunks: chunks.length,
+        parentDocument: chunk.chunkType === ChunkType.SUMMARY ? null : parentDocumentId,
+        metadata: {
+          travelTypes: [tripDoc.travelType],
+          estimatedCost: inferBudgetTier(tripDoc.budget),
+          duration: `${tripDoc.totalDays} days`,
+        },
+      });
+
+      // The summary chunk is always first and acts as the parent
+      if (chunk.chunkType === ChunkType.SUMMARY) {
+        parentDocumentId = doc._id;
+      }
+    }
+
+    logger.info(`Trip knowledge ingested for trip: "${tripDoc.title}" (${tripDoc._id}) — ${chunks.length} chunks.`);
   } catch (error: any) {
     logger.error(`Trip knowledge ingestion failed for trip ${tripDoc._id}: ${error.message}`);
   }
@@ -163,84 +214,106 @@ export async function ingestTripKnowledge(tripDoc: any, userId: string): Promise
 
 /**
  * Update existing trip knowledge when a user edits their saved trip.
- * Regenerates the embedding ONLY if the content has changed meaningfully.
+ * Smart update: deletes old chunks and re-ingests, but reuses embeddings if hash matches.
  */
 export async function updateTripKnowledge(tripId: string, tripDoc: any): Promise<void> {
   try {
-    // Find existing document
-    const existing = await VectorDocument.findOne({
+    const existingChunks = await VectorDocument.find({
       tripId,
       sourceType: KnowledgeSourceType.USER_TRIPS,
     });
 
-    if (!existing) {
+    if (existingChunks.length === 0) {
       logger.warn(`Trip knowledge not found for update (tripId: ${tripId}). Falling back to ingest.`);
-      // If it doesn't exist for some reason, just ingest it now
       await ingestTripKnowledge(tripDoc, tripDoc.user.toString());
       return;
     }
 
-    const input: TripKnowledgeInput = {
-      tripDoc,
-      userId: existing.userId ? existing.userId.toString() : tripDoc.user.toString(),
-    };
+    const userId = existingChunks[0].userId ? existingChunks[0].userId.toString() : tripDoc.user.toString();
+    const input: TripKnowledgeInput = { tripDoc, userId };
+    const newChunks = buildTripChunks(input);
+    const tags = buildTripTags(input);
 
-    const newContent = buildTripContent(input);
-    const newContentHash = generateContentHash(newContent);
-    const newTags = buildTripTags(input);
+    const mainCity = tripDoc.cities && tripDoc.cities.length > 0 ? tripDoc.cities[0].name : 'Multiple';
+    const mainCountry = tripDoc.cities && tripDoc.cities.length > 0 ? tripDoc.cities[0].country || 'Unknown' : 'Multiple';
 
-    let newEmbedding = existing.embedding;
+    // Delete old chunks first
+    await VectorDocument.deleteMany({ tripId, sourceType: KnowledgeSourceType.USER_TRIPS });
 
-    // Only regenerate embedding if content changed
-    if (newContentHash !== existing.contentHash) {
-      logger.debug(`Trip content changed for ${tripId}, regenerating embedding...`);
-      newEmbedding = await generateDocumentEmbedding({
-        title: tripDoc.title,
-        category: VectorDocumentCategory.ITINERARY,
-        country: existing.country, // Keep original main location
-        city: existing.city,
-        tags: newTags,
-        content: newContent,
+    let parentDocumentId: any = null;
+
+    // Insert new chunks, reusing embeddings where possible
+    for (const chunk of newChunks) {
+      const contentHash = generateContentHash(chunk.content);
+      
+      // Look for an existing chunk with the same hash
+      const existingMatch = existingChunks.find(c => c.contentHash === contentHash);
+      
+      let embedding = existingMatch?.embedding;
+      if (!embedding) {
+        logger.debug(`Chunk content changed for ${tripId} (type: ${chunk.chunkType}), generating embedding...`);
+        embedding = await generateDocumentEmbedding({
+          title: chunk.title,
+          category: chunk.category,
+          country: mainCountry,
+          city: mainCity,
+          tags,
+          content: chunk.content,
+          source: 'user_trip',
+        });
+      }
+
+      const doc = await VectorDocument.create({
+        title: chunk.title,
+        category: chunk.category,
+        country: mainCountry,
+        city: mainCity,
+        tags,
+        content: chunk.content,
+        contentHash,
+        embedding,
         source: 'user_trip',
+        sourceType: KnowledgeSourceType.USER_TRIPS,
+        userId: userId,
+        tripId: tripId,
+        privacy: tripDoc.isPublic ? 'public' : 'private',
+        version: (existingChunks[0].version || 1) + 1,
+        chunkType: chunk.chunkType,
+        chunkIndex: chunk.chunkIndex,
+        totalChunks: newChunks.length,
+        parentDocument: chunk.chunkType === ChunkType.SUMMARY ? null : parentDocumentId,
+        metadata: {
+          travelTypes: [tripDoc.travelType],
+          estimatedCost: inferBudgetTier(tripDoc.budget),
+          duration: `${tripDoc.totalDays} days`,
+        },
       });
+
+      if (chunk.chunkType === ChunkType.SUMMARY) {
+        parentDocumentId = doc._id;
+      }
     }
 
-    // Update document
-    await VectorDocument.findByIdAndUpdate(existing._id, {
-      $set: {
-        title: tripDoc.title,
-        content: newContent,
-        contentHash: newContentHash,
-        tags: newTags,
-        embedding: newEmbedding,
-        privacy: tripDoc.isPublic ? 'public' : 'private',
-        version: (existing.version || 1) + 1,
-        'metadata.travelTypes': [tripDoc.travelType],
-        'metadata.estimatedCost': tripDoc.budget,
-        'metadata.duration': `${tripDoc.totalDays} days`,
-      },
-    });
-
-    logger.info(`Trip knowledge updated for trip: "${tripDoc.title}" (${tripId})`);
+    logger.info(`Trip knowledge updated for trip: "${tripDoc.title}" (${tripId}) — ${newChunks.length} chunks.`);
   } catch (error: any) {
     logger.error(`Trip knowledge update failed for trip ${tripId}: ${error.message}`);
   }
 }
 
 /**
- * Delete trip knowledge when a user deletes their saved trip.
+ * Delete all trip knowledge chunks when a user deletes their saved trip.
  */
 export async function deleteTripKnowledge(tripId: string): Promise<void> {
   try {
-    const result = await VectorDocument.findOneAndDelete({
+    const result = await VectorDocument.deleteMany({
       tripId,
       sourceType: KnowledgeSourceType.USER_TRIPS,
     });
 
-    if (result) {
-      logger.info(`Trip knowledge deleted for tripId: ${tripId}`);
+    if (result.deletedCount > 0) {
+      logger.info(`Trip knowledge deleted for tripId: ${tripId} (${result.deletedCount} chunks)`);
     } else {
-      logger.debug(`No trip knowledge found to delete for tripId: ${tripId}`);
+      logger.debug(`No trip knowledge chunks found to delete for tripId: ${tripId}`);
     }
   } catch (error: any) {
     logger.error(`Trip knowledge deletion failed for trip ${tripId}: ${error.message}`);

@@ -2,7 +2,8 @@ import mongoose from "mongoose";
 import SavedTrip from "../models/SavedTrip.js";
 import { getOpenTripMapAPI } from "../mcp-servers/places/api.js";
 import { generateEmbedding, buildTripSummary } from "../services/embedding.js";
-import { ingestTripKnowledge, deleteTripKnowledge } from "../vector/services/trip-knowledge.service.js";
+import { ingestTripKnowledge, updateTripKnowledge, deleteTripKnowledge } from "../vector/services/trip-knowledge.service.js";
+import { updateUserProfileKnowledge } from "../vector/services/user-profile.service.js";
 
 // Escape regex metacharacters so user-supplied search text can't be used
 // to build unexpected/expensive patterns.
@@ -100,6 +101,11 @@ export const saveTrip = async (req, res) => {
       // Fire-and-forget: ingest rich trip knowledge into vector semantic layer
       ingestTripKnowledge(savedTrip, req.userId).catch(err => 
         console.error('⚠️ Trip vector ingestion failed:', err.message)
+      );
+
+      // Fire-and-forget: update user profile
+      updateUserProfileKnowledge(req.userId).catch(err => 
+        console.error('⚠️ User profile update failed:', err.message)
       );
     })();
 
@@ -213,6 +219,12 @@ export const updateSavedTrip = async (req, res) => {
       message: "Trip updated successfully",
       savedTrip,
     });
+
+    // Fire-and-forget: update trip knowledge chunks
+    updateTripKnowledge(id, savedTrip).catch(() => {});
+
+    // Fire-and-forget: update user profile
+    updateUserProfileKnowledge(req.userId).catch(() => {});
   } catch (error) {
     console.error("Error updating saved trip:", error);
     res.status(500).json({
@@ -244,6 +256,9 @@ export const deleteSavedTrip = async (req, res) => {
 
     // Fire-and-forget: delete trip knowledge from vector semantic layer
     deleteTripKnowledge(id).catch(() => {});
+
+    // Fire-and-forget: update user profile
+    updateUserProfileKnowledge(req.userId).catch(() => {});
   } catch (error) {
     console.error("Error deleting saved trip:", error);
     res.status(500).json({
@@ -318,7 +333,7 @@ export const semanticSearchTrips = async (req, res) => {
         $addFields: { score: { $meta: "vectorSearchScore" } },
       },
       {
-        $match: { score: { $gte: 0.65 } } // Filter out low-relevance matches
+        $match: { score: { $gte: 0.75 } } // Filter out low-relevance matches (increased for strictness)
       },
       {
         // Exclude the large embedding array from results
@@ -329,6 +344,8 @@ export const semanticSearchTrips = async (req, res) => {
     console.log(
       `🔍 Semantic search for "${query}" → ${results.length} results (user: ${req.userId})`
     );
+    // Log the scores so we can see how well it's matching
+    results.forEach(r => console.log(`   - [Score: ${r.score.toFixed(3)}] ${r.title}`));
 
     res.json({ savedTrips: results });
   } catch (error) {
