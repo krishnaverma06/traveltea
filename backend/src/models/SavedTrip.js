@@ -124,6 +124,15 @@ const savedTripSchema = new mongoose.Schema(
     // Additional metadata
     isPublic: { type: Boolean, default: false },
     tags: { type: [String], default: [] },
+    // Semantic search fields (Atlas Vector Search)
+    embedding: {
+      type: [Number],
+      select: false, // Exclude from default queries (large array)
+    },
+    searchSummary: {
+      type: String,
+      trim: true,
+    },
   },
   { timestamps: true }
 );

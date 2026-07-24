@@ -1,0 +1,185 @@
+[
+  {
+    "title": "Manali — Himalayan Adventure Hub",
+    "category": "destination",
+    "subtype": "hill station",
+    "country": "India",
+    "city": "Manali",
+    "tags": ["mountains", "himalaya", "adventure", "snow", "trekking", "honeymoon", "hill station"],
+    "content": "Manali is a popular hill station in the Kullu Valley of Himachal Pradesh, situated at an altitude of 2,050 meters in the western Himalayas. Known as the gateway to Rohtang Pass and Leh-Ladakh, Manali is a year-round destination offering adventure sports, scenic landscapes, and a vibrant backpacker culture. The town is split between modern Mall Road (shops, restaurants, hotels) and Old Manali (cafés, hostels, hippie culture, apple orchards). The Beas River flows through the valley, offering rafting and fishing. Manali is connected by road from Delhi (12-14 hours by bus/car), Chandigarh (7-8 hours), and has a domestic airport at Bhuntar (50 km away). The newly opened Atal Tunnel (world's longest highway tunnel at 9.02 km) connects Manali to Lahaul-Spiti Valley year-round.",
+    "metadata": {
+      "coordinates": { "lat": 32.2396, "lon": 77.1887 },
+      "currency": "INR",
+      "languages": ["Hindi", "English", "Pahari"],
+      "bestTimeToVisit": ["March", "April", "May", "June", "October", "November", "December", "January", "February"],
+      "population": 8100,
+      "travelTypes": ["adventure", "leisure", "solo", "family"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Rohtang Pass",
+    "category": "attraction",
+    "subtype": "mountain pass",
+    "country": "India",
+    "city": "Manali",
+    "tags": ["mountain pass", "snow", "scenic", "adventure", "permit required", "Rohtang"],
+    "content": "Rohtang Pass, at 3,978 meters, is a high mountain pass on the eastern Pir Panjal Range of the Himalayas. Located 51 km from Manali, it connects Kullu Valley with Lahaul and Spiti Valleys. The pass is open from May/June to November (weather dependent) and offers stunning views of glaciers, peaks, and snow-covered landscapes. Activities at the top include snow play, skiing in winter, and photography. A permit is mandatory — apply online at rohtangpermits.hp.gov.in (₹550 per person, ₹100 for Indians). Only 1,200 vehicles are allowed daily to limit environmental impact. The drive from Manali takes 3-4 hours one way. With the Atal Tunnel, tourists now have the option to cross to Sissu/Lahaul without going over the pass. Best visited on clear days for panoramic views. Carry warm clothing — temperatures can drop below 0°C even in summer.",
+    "metadata": {
+      "rating": 4.5,
+      "difficulty": "moderate",
+      "duration": "full day trip",
+      "estimatedCost": "₹550-2,000 (permit + transport)",
+      "coordinates": { "lat": 32.3722, "lon": 77.2477 },
+      "bestTimeToVisit": ["May", "June", "July", "August", "September", "October"],
+      "travelTypes": ["adventure", "leisure", "family"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Solang Valley — Adventure Sports Hub",
+    "category": "activity",
+    "subtype": "adventure sports",
+    "country": "India",
+    "city": "Manali",
+    "tags": ["adventure", "skiing", "paragliding", "zorbing", "snow", "ropeway", "Solang"],
+    "content": "Solang Valley (Solang Nallah), located 13 km from Manali, is the adventure sports capital of Himachal Pradesh. Summer activities (April–June): Paragliding (₹1,500-3,000 for 10-15 minute tandem flight), zorbing (₹500-800), ropeway/gondola to 3,000m (₹800 return), horse riding (₹500-1,000), and ATV rides (₹800-1,200). Winter activities (December–February): Skiing (₹1,000-3,000 per session with instructor), snowboarding, snow tubing, and building snowmen. The newly installed gondola ropeway provides year-round access to higher slopes with panoramic Himalayan views. Solang is easily reachable by taxi from Manali (₹300-500 one way) or by local bus. Arrive early (8-9 AM) to avoid crowds, especially on weekends. Food stalls and restaurants are available at the base.",
+    "metadata": {
+      "difficulty": "easy",
+      "estimatedCost": "₹500-3,000 per activity",
+      "coordinates": { "lat": 32.3167, "lon": 77.1566 },
+      "bestTimeToVisit": ["December", "January", "February", "April", "May", "June"],
+      "travelTypes": ["adventure", "family", "leisure"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Old Manali — Backpacker's Paradise",
+    "category": "hidden_gem",
+    "subtype": "neighborhood",
+    "country": "India",
+    "city": "Manali",
+    "tags": ["backpacking", "cafes", "hippie", "old manali", "budget", "chill", "apple orchards"],
+    "content": "Old Manali, located 3 km uphill from the main Mall Road, is a charming village-like neighborhood that's become the heart of Manali's backpacker and traveler culture. Unlike the commercial bustle of Mall Road, Old Manali offers narrow lanes lined with guesthouses, Israeli/Italian/Tibetan cafés, handicraft shops, and apple orchards with mountain views. Must-visit cafés include Lazy Dog Lounge (stunning valley views), Drifters' Café (bonfire evenings and live music), The Renaissance (Italian food), and Bob Dylan's Café. Accommodation ranges from ₹300/night for basic rooms to ₹2,000/night for cozy cottages. The area is walkable and car-free on the narrower lanes. Visit the old wooden Manu Temple (dedicated to sage Manu, after whom Manali is named) and walk along the Manalsu stream. Old Manali comes alive in the evenings with a social, international backpacker vibe.",
+    "metadata": {
+      "estimatedCost": "₹300-2,000 per night accommodation",
+      "travelTypes": ["solo", "adventure", "leisure"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Manali Snow Season Guide",
+    "category": "seasonal_info",
+    "subtype": "winter season",
+    "country": "India",
+    "city": "Manali",
+    "tags": ["snow", "winter", "skiing", "snowfall", "December", "January", "February", "cold weather"],
+    "content": "Manali's snow season typically runs from late December to early March, with January being the snowiest month. Temperature ranges: December (-2°C to 10°C), January (-5°C to 8°C), February (-3°C to 10°C). Fresh snowfall often blankets Manali town itself 3-5 times per season, transforming it into a winter wonderland. Solang Valley and Rohtang area receive heavier snowfall. Key considerations: Roads to Rohtang Pass are closed in winter (Atal Tunnel remains open year-round). Heating in budget hotels is often limited to room heaters — pack thermals and layers. Hot water may be intermittent. Mall Road remains accessible but side roads can get icy. Hotel prices increase 50-100% during Christmas/New Year week — book early. Snow activities: skiing at Solang Valley, snowshoeing, building snowmen, and simply enjoying the Himalayan winter scenery. Pack: thermal innerwear, down jacket, waterproof boots, gloves, woolen cap, sunscreen (UV is strong at altitude), and lip balm.",
+    "metadata": {
+      "bestTimeToVisit": ["December", "January", "February"],
+      "travelTypes": ["adventure", "leisure", "family"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Manali Trekking & Hiking Guide",
+    "category": "guide",
+    "subtype": "trekking",
+    "country": "India",
+    "city": "Manali",
+    "tags": ["trekking", "hiking", "trails", "Hampta Pass", "Beas Kund", "mountains"],
+    "content": "Manali is the starting point for several iconic Himalayan treks. Popular treks: Beas Kund Trek (3-day, easy-moderate, ₹5,000-8,000 with guide) — glacial lake at the source of the Beas River. Hampta Pass Trek (4-5 days, moderate, ₹8,000-12,000) — dramatic crossover from green Kullu Valley to barren Lahaul, one of India's best treks. Bhrigu Lake Trek (3-day, moderate, ₹5,000-8,000) — sacred high-altitude lake at 4,300m with 360° mountain views. Chandrakhani Pass Trek (3-4 days, moderate-hard). Jogini Waterfall hike (2-hour, easy, free) — a short but rewarding hike from Vashisht village. Best trekking season: May to October (avoid monsoon July-August for difficult trails). Reputable operators: Himalayan Frontiers, Manali Adventure Company, and YHAI (Youth Hostels Association of India — most affordable). All multi-day treks require a guide; solo trekking is not recommended on higher routes.",
+    "metadata": {
+      "difficulty": "moderate",
+      "estimatedCost": "₹5,000-12,000 per trek",
+      "bestTimeToVisit": ["May", "June", "September", "October"],
+      "travelTypes": ["adventure", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Manali Emergency Information",
+    "category": "emergency_info",
+    "subtype": "safety",
+    "country": "India",
+    "city": "Manali",
+    "tags": ["emergency", "safety", "hospital", "altitude sickness", "rescue", "helpline"],
+    "content": "Emergency contacts for Manali: Police: 100 or 112. Manali Police Station: 01902-252340. Ambulance: 108. Fire: 101. Mission Hospital Manali: 01902-253080 — the main hospital with emergency services. Lady Willingdon Hospital: 01902-252061. HRTC Bus Stand: 01902-252323. Atal Tunnel Emergency: 01902-250001. Altitude sickness awareness: Manali town (2,050m) is generally safe, but excursions to Rohtang Pass (3,978m) or treks above 3,500m can cause altitude sickness. Symptoms include headache, nausea, dizziness, and breathlessness. Descend immediately if symptoms worsen. Carry Diamox (consult a doctor before use). Road safety: Mountain roads are narrow and winding — hire experienced local drivers. During monsoon (July-September), landslides can block roads temporarily. Always carry warm clothing and emergency supplies when traveling to remote areas.",
+    "metadata": {
+      "phoneNumbers": ["100", "112", "108", "01902-252340", "01902-253080"],
+      "travelTypes": ["leisure", "business", "adventure", "cultural", "family", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Manali Budget Guide — 4 Days",
+    "category": "budget_template",
+    "subtype": "budget breakdown",
+    "country": "India",
+    "city": "Manali",
+    "tags": ["budget", "4 days", "backpacking", "affordable", "cost breakdown"],
+    "content": "A 4-day budget trip to Manali can be done for ₹8,000–₹12,000 per person. Transport from Delhi: Volvo AC bus (₹1,200-1,500 one way, 12-14 hours overnight), ordinary bus (₹700-900). Accommodation: Hostels in Old Manali (₹300-800/night) like Zostel or The Hosteller; budget guesthouses (₹800-1,500/night). Food: Café meals in Old Manali (₹150-400), local dhabas (₹80-150), momos and thukpa (₹60-120). Activities: Jogini Waterfall hike (free), Hadimba Temple (free), Mall Road walking (free), Solang Valley activities (₹500-3,000), Rohtang Pass excursion (₹550 permit + ₹400-600 shared taxi). Sightseeing: Vashisht Hot Springs (free), Naggar Castle (₹15-50). Tips: Travel in shoulder season (September-October or March-April) for lower prices. Rent a scooter (₹500-800/day) for local sightseeing instead of taxis. Eat at local dhabas rather than tourist cafés for authentic, affordable food.",
+    "metadata": {
+      "estimatedCost": "₹8,000-12,000 total for 4 days",
+      "currency": "INR",
+      "travelTypes": ["solo", "adventure", "leisure"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Hadimba Temple (Dhungri Temple)",
+    "category": "attraction",
+    "subtype": "temple",
+    "country": "India",
+    "city": "Manali",
+    "tags": ["temple", "wood carving", "cedar forest", "ancient", "architecture", "free entry"],
+    "content": "Hadimba Temple (also called Dhungri Temple) is a unique four-story wooden pagoda-style temple dedicated to Hadimba Devi, a character from the Mahabharata epic. Built in 1553 by Maharaja Bahadur Singh, the temple sits amidst a towering cedar forest (deodar), creating a serene, mystical atmosphere. The temple's wooden doorway is intricately carved with figures, animals, and mythological scenes. The structure's architecture is unlike typical Hindu temples, reflecting the Himalayan pagoda style. The surrounding forest is pleasant for short walks and photography. Entry is free, and the temple is a 1.5 km walk from Mall Road. Yak and rabbit photo opportunities are available outside (₹50-100). Allow 30-45 minutes for a visit. The temple hosts the Dhungri Festival in May with traditional music and dance.",
+    "metadata": {
+      "rating": 4.3,
+      "duration": "30-45 minutes",
+      "estimatedCost": "Free entry",
+      "coordinates": { "lat": 32.2421, "lon": 77.1686 },
+      "travelTypes": ["cultural", "leisure", "family"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Manali to Leh Highway — Road Trip Guide",
+    "category": "guide",
+    "subtype": "road trip",
+    "country": "India",
+    "city": "Manali",
+    "tags": ["road trip", "Leh", "Ladakh", "highway", "passes", "motorcycle", "scenic drive"],
+    "content": "The Manali-Leh Highway is one of the world's most spectacular road trips — a 473 km journey crossing five high-altitude passes, with the highest being Taglang La at 5,328m. The road is open from June to mid-October (weather dependent). Typical itinerary: Day 1 — Manali to Jispa/Keylong (115 km, via Atal Tunnel), Day 2 — Jispa to Sarchu or Pang (100-150 km, crossing Baralacha La at 4,890m), Day 3 — Pang to Leh (180 km, crossing Lachalung La, Nakee La, and Taglang La). Self-drive options: rented SUV from Manali (₹15,000-20,000 for the trip) or Royal Enfield motorcycle (₹1,500-2,500/day). Shared taxi: ₹3,000-5,000 per person. Essential: carry cash (no ATMs), fuel up at every station, bring medicines for altitude sickness, carry warm clothing and rain gear. Inner Line Permits are required for certain areas — apply online at laikishore.hp.gov.in. This is not a beginner's road trip — high altitude, unpaved stretches, and river crossings demand experience.",
+    "metadata": {
+      "difficulty": "hard",
+      "duration": "2-3 days driving",
+      "estimatedCost": "₹3,000-20,000 depending on mode",
+      "bestTimeToVisit": ["June", "July", "August", "September"],
+      "travelTypes": ["adventure", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Manali Planning Tips",
+    "category": "planning_rule",
+    "subtype": "practical tips",
+    "country": "India",
+    "city": "Manali",
+    "tags": ["planning", "tips", "practical", "transport", "booking", "altitude"],
+    "content": "Essential planning rules for a Manali trip: Book Volvo buses from Delhi via HRTC website (hrtc.gov.in) or redBus — they fill up fast on weekends and holidays. Avoid visiting during long weekends (Independence Day, New Year) unless you enjoy crowds and 2x prices. The Bhuntar airport (50 km away) has limited flights and frequent cancellations due to weather — bus is more reliable. Stay in Old Manali for a quieter, more atmospheric experience; stay on Mall Road for convenience and shopping. Carry layers — temperature swings of 15-20°C between day and night are normal. Apply for Rohtang Pass permits 1-2 days in advance online. Local SIM cards work poorly above Manali — download offline maps. Traffic jams on Mall Road are common — walk or rent a scooter. Pre-book Atal Tunnel excursions to Sissu if visiting in winter. Manali combines well with Kasol (2 hours), Naggar (1 hour), and Manikaran (2 hours) for a broader Kullu Valley itinerary.",
+    "metadata": {
+      "travelTypes": ["leisure", "adventure", "family", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "FAQ — Is Manali Safe for Solo Female Travelers?",
+    "category": "faq",
+    "subtype": "safety",
+    "country": "India",
+    "city": "Manali",
+    "tags": ["FAQ", "solo female", "safety", "women travelers", "tips"],
+    "content": "Manali is generally considered one of the safer destinations in India for solo female travelers, but standard precautions apply. The Old Manali area has a strong international backpacker community and feels safe even at night. Tips for solo women: Stay in well-reviewed hostels with female dorms (Zostel, The Hosteller, Moustache). Avoid isolated trails alone — join group treks or hire a guide. Use reputable taxi services or Ola (Uber is limited). The local Himachali people are generally warm and helpful. Avoid accepting drinks from strangers at cafés. Keep accommodation staff informed of your trekking plans. Emergency women's helpline: 1091 (24/7). Solo-friendly activities: café hopping in Old Manali, Jogini Waterfall hike (popular and well-trafficked), cooking classes, yoga retreats at Vashisht, and group treks organized by hostels."
+  }
+]

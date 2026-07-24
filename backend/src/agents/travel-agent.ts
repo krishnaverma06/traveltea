@@ -48,6 +48,10 @@ const AgentStateAnnotation = Annotation.Root({
     reducer: (left, right) => right ?? left,
     default: () => undefined,
   }),
+  categories: Annotation<string[] | undefined>({
+    reducer: (left, right) => right ?? left,
+    default: () => undefined,
+  }),
   itinerary: Annotation<Itinerary | null | undefined>({
     reducer: (left, right) => right ?? left,
     default: () => undefined,
@@ -87,7 +91,7 @@ export class TravelAgent {
   constructor(config: AgentConfig = {}) {
     // Initialize Gemini model
     this.model = new ChatGoogleGenerativeAI({
-      model: config.modelName || process.env.GEMINI_MODEL || "gemini-1.5-flash",
+      model: config.modelName || process.env.GEMINI_MODEL || "gemini-3.1-flash-lite",
       temperature: config.temperature || 0.7,
       maxOutputTokens: config.maxTokens || 1000,
       streaming: config.streaming || false,
@@ -169,7 +173,7 @@ export class TravelAgent {
 
       return {
         intent: intentString,
-        searchResults: detectedIntent.entities.opentripmap_kinds as any, // Store categories temporarily
+        categories: detectedIntent.entities.opentripmap_kinds || [],
         messages: [new AIMessage(`Understood: ${detectedIntent.reasoning}`)],
       };
     } catch (error) {
@@ -191,8 +195,7 @@ export class TravelAgent {
     try {
       const { intent, userQuery } = state;
 
-      // Extract detected categories (stored temporarily in searchResults by planner)
-      const detectedCategories = (state.searchResults as any) || [];
+      const detectedCategories = state.categories || [];
 
       // Map intent to new naming convention if needed
       const normalizedIntent =
@@ -200,14 +203,19 @@ export class TravelAgent {
 
       switch (normalizedIntent) {
         case "search_destination":
-        case "search_attractions": {
+        case "search_attractions":
+        case "search_hotels": {
           // Extract destination and category from query
           const destination = this.extractDestination(userQuery);
 
-          const categories =
+          let categories =
             detectedCategories.length > 0
               ? detectedCategories
               : [this.extractCategory(userQuery)].filter(Boolean);
+              
+          if (normalizedIntent === "search_hotels") {
+            categories = ["accomodations"];
+          }
 
           console.log(
             `🔍 [TOOL] Searching for ${categories.join(", ") || "attractions"} in ${destination}`,
@@ -357,7 +365,11 @@ export class TravelAgent {
           };
         }
 
-        case "web_search": {
+        case "web_search":
+        case "search_flights":
+        case "get_weather":
+        case "convert_currency":
+        case "estimate_budget": {
           console.log(`🌐 [TOOL] Web search for: ${userQuery}`);
 
           const result = await toolRegistry.executeTool("web_search", {
@@ -1091,7 +1103,7 @@ let _travelAgentInstance: TravelAgent | null = null;
 export function getTravelAgent(): TravelAgent {
   if (!_travelAgentInstance) {
     _travelAgentInstance = new TravelAgent({
-      modelName: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      modelName: process.env.GEMINI_MODEL || "gemini-3.1-flash-lite",
       temperature: 0.7,
     });
   }
