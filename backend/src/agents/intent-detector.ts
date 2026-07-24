@@ -27,20 +27,20 @@ export const IntentSchema = z.object({
   ]).describe('The primary intent of the user query'),
   
   entities: z.object({
-    location: z.string().optional().describe('Main location/destination mentioned'),
-    origin: z.string().optional().describe('Starting location for travel'),
-    destination: z.string().optional().describe('Destination for travel'),
+    location: z.string().nullish().describe('Main location/destination mentioned'),
+    origin: z.string().nullish().describe('Starting location for travel'),
+    destination: z.string().nullish().describe('Destination for travel'),
     dates: z.object({
-      start: z.string().optional(),
-      end: z.string().optional(),
-    }).optional().describe('Travel dates in ISO format'),
-    duration: z.number().optional().describe('Number of days for the trip'),
-    budget: z.enum(['budget', 'mid-range', 'luxury']).optional().describe('Budget preference'),
-    number_of_people: z.number().optional().describe('Number of travelers'),
-    preferences: z.array(z.string()).optional().describe('User preferences like adventure, culture, food, etc.'),
-    category: z.string().optional().describe('Category of interest like museums, parks, restaurants'),
-    opentripmap_kinds: z.array(z.string()).optional().describe('OpenTripMap category codes detected from query'),
-    query_terms: z.array(z.string()).optional().describe('Key search terms'),
+      start: z.string().nullish(),
+      end: z.string().nullish(),
+    }).nullish().describe('Travel dates in ISO format'),
+    duration: z.number().nullish().describe('Number of days for the trip'),
+    budget: z.enum(['budget', 'mid-range', 'luxury']).nullish().describe('Budget preference'),
+    number_of_people: z.number().nullish().describe('Number of travelers'),
+    preferences: z.array(z.string()).nullish().describe('User preferences like adventure, culture, food, etc.'),
+    category: z.string().nullish().describe('Category of interest like museums, parks, restaurants'),
+    opentripmap_kinds: z.array(z.string()).nullish().describe('OpenTripMap category codes detected from query'),
+    query_terms: z.array(z.string()).nullish().describe('Key search terms'),
   }).describe('Extracted entities from the query'),
   
   tools_to_call: z.array(z.string()).describe('List of tools that should be called to fulfill this request'),
@@ -61,7 +61,7 @@ export class IntentDetector {
 
   constructor(config: AgentConfig = {}) {
     this.model = new ChatGoogleGenerativeAI({
-      model: config.modelName || process.env.GEMINI_MODEL || "gemini-1.5-flash",
+      model: config.modelName || process.env.GEMINI_MODEL || "gemini-3.1-flash-lite",
       temperature: config.temperature || 0.7,
       maxOutputTokens: config.maxTokens || 1000,
       streaming: config.streaming || false,

@@ -1,6 +1,7 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import SavedTrip from "../models/SavedTrip.js";
 import { getOpenTripMapAPI } from "../mcp-servers/places/api.js";
+import { ingestSearchKnowledge } from "../vector/services/search-knowledge.service.js";
 
 const DEFAULT_QUERY = "Paris";
 
@@ -20,6 +21,9 @@ export const getDestinations = async (req, res) => {
     destinations = await getOpenTripMapAPI().enrichWithPhotos(destinations, 12);
 
     res.json({ destinations });
+
+    // Fire-and-forget: ingest search knowledge
+    ingestSearchKnowledge(query, destinations, "opentripmap").catch(() => {});
   } catch (error) {
     console.error("Error fetching explore destinations:", error);
     res.status(500).json({

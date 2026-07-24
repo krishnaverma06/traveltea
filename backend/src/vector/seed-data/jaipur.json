@@ -1,0 +1,237 @@
+[
+  {
+    "title": "Jaipur — The Pink City",
+    "category": "destination",
+    "subtype": "city",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["pink city", "rajasthan", "heritage", "royal", "culture", "architecture"],
+    "content": "Jaipur, the capital of Rajasthan, is known as the Pink City due to the terracotta-pink color of its historic buildings. Founded in 1727 by Maharaja Sawai Jai Singh II, it was India's first planned city. Jaipur is part of the Golden Triangle tourist circuit alongside Delhi and Agra. The city blends royal heritage with vibrant bazaars, offering visitors a rich tapestry of forts, palaces, temples, and colorful markets. The Old City is surrounded by walls and gates, with Johari Bazaar and Bapu Bazaar famous for textiles, gemstones, and handicrafts. Jaipur's cuisine features dal baati churma, pyaaz kachori, and lassi. The city is well connected by Jaipur International Airport, railway station, and national highways. Best visited between October and March when the weather is pleasant.",
+    "metadata": {
+      "coordinates": { "lat": 26.9124, "lon": 75.7873 },
+      "currency": "INR",
+      "languages": ["Hindi", "English", "Rajasthani"],
+      "bestTimeToVisit": ["October", "November", "December", "January", "February", "March"],
+      "population": 3100000,
+      "travelTypes": ["cultural", "leisure", "family", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Amber Fort (Amer Fort)",
+    "category": "attraction",
+    "subtype": "fort",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["fort", "UNESCO", "heritage", "history", "architecture", "hilltop", "elephant ride"],
+    "content": "Amber Fort, located 11 km from Jaipur, is a stunning hilltop fortress built in red sandstone and white marble. Constructed by Raja Man Singh I in 1592 and expanded by successive rulers, it blends Rajput and Mughal architecture. Key highlights include the Sheesh Mahal (Hall of Mirrors), Diwan-i-Aam (Hall of Public Audience), Diwan-i-Khas (Hall of Private Audience), and Sukh Niwas with its innovative cooling system. The fort is connected to Jaigarh Fort above via underground passages. Visitors can reach the fort by elephant ride, jeep, or walking. A light and sound show is held every evening. Entry fee is approximately ₹200 for Indian tourists and ₹500 for foreign tourists. Allow 2–3 hours for a thorough visit.",
+    "metadata": {
+      "rating": 4.7,
+      "duration": "2-3 hours",
+      "estimatedCost": "₹200-500 entry",
+      "openingHours": "8:00 AM – 5:30 PM daily",
+      "coordinates": { "lat": 26.9855, "lon": 75.8513 },
+      "travelTypes": ["cultural", "leisure", "family"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Hawa Mahal — Palace of Winds",
+    "category": "attraction",
+    "subtype": "palace",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["palace", "iconic", "architecture", "photography", "landmark", "pink city"],
+    "content": "Hawa Mahal, the Palace of Winds, is Jaipur's most iconic landmark. Built in 1799 by Maharaja Sawai Pratap Singh, this five-story honeycomb-shaped façade has 953 small windows (jharokhas) designed to allow royal women to observe street life without being seen. The structure is built from pink sandstone and is best viewed and photographed from the street in the early morning when the sun illuminates the facade. The palace is located on the main road of the old city and can be explored in under an hour. Entry fee is ₹50 for Indians and ₹200 for foreigners. The rooftop offers panoramic views of Jantar Mantar, City Palace, and the bustling streets below.",
+    "metadata": {
+      "rating": 4.5,
+      "duration": "45 minutes – 1 hour",
+      "estimatedCost": "₹50-200 entry",
+      "openingHours": "9:00 AM – 5:00 PM daily",
+      "coordinates": { "lat": 26.9239, "lon": 75.8267 },
+      "travelTypes": ["cultural", "leisure", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Nahargarh Fort",
+    "category": "attraction",
+    "subtype": "fort",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["fort", "sunset", "viewpoint", "hilltop", "panoramic"],
+    "content": "Nahargarh Fort stands on the edge of the Aravalli Hills overlooking Jaipur city. Built in 1734 by Maharaja Sawai Jai Singh II, the fort served as a retreat and defense stronghold. Today it is most famous for its spectacular sunset views over the entire city and the surrounding hills. The Madhavendra Bhawan inside the fort has identically designed suites for the king's twelve queens. The fort has a café and restaurant where visitors can enjoy drinks with a panoramic view. It is connected to Jaigarh Fort by a 2 km trek through the hills. Best visited in the late afternoon to catch the sunset. Entry fee is approximately ₹50 for Indians and ₹200 for foreigners.",
+    "metadata": {
+      "rating": 4.4,
+      "duration": "1.5-2 hours",
+      "estimatedCost": "₹50-200 entry",
+      "openingHours": "10:00 AM – 5:30 PM daily",
+      "coordinates": { "lat": 26.9373, "lon": 75.8153 },
+      "travelTypes": ["leisure", "adventure", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "City Palace Jaipur",
+    "category": "attraction",
+    "subtype": "palace",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["palace", "museum", "royal", "architecture", "courtyard"],
+    "content": "The City Palace is a magnificent complex in the heart of Jaipur's old city, blending Rajasthani and Mughal architecture. Built by Maharaja Sawai Jai Singh II when he founded the city, part of the palace is still a royal residence. Open sections include the Chandra Mahal, Mubarak Mahal (now a textile museum), the Pitam Niwas Chowk with its four ornate gates representing the four seasons, and the Diwan-i-Khas housing two massive silver urns (Guinness World Record for largest silver objects). The palace complex also includes the Jantar Mantar observatory next door. Allow 2 hours for a complete visit. Entry is ₹200 for Indians and ₹700 for foreigners.",
+    "metadata": {
+      "rating": 4.5,
+      "duration": "2 hours",
+      "estimatedCost": "₹200-700 entry",
+      "openingHours": "9:30 AM – 5:00 PM daily",
+      "coordinates": { "lat": 26.9258, "lon": 75.8237 },
+      "travelTypes": ["cultural", "leisure", "family"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Dal Baati Churma — Rajasthani Staple",
+    "category": "restaurant",
+    "subtype": "traditional cuisine",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["food", "rajasthani", "traditional", "vegetarian", "local cuisine", "dal baati"],
+    "content": "Dal Baati Churma is Rajasthan's most iconic dish and a must-try in Jaipur. It consists of baked wheat bread rolls (baati) served with a spiced lentil curry (dal) and a sweet crumbled wheat dessert (churma). Top restaurants to try it include Chokhi Dhani (a village-themed resort on Tonk Road), LMB (Laxmi Mishthan Bhandar) in Johari Bazaar, and Spice Court in Civil Lines. Street food options include pyaaz kachori at Rawat Mishthan Bhandar and kulfi at the old city stalls. A typical meal costs ₹300-800 per person at a restaurant. Jaipur is largely vegetarian-friendly, making it excellent for vegetarian travelers.",
+    "metadata": {
+      "priceLevel": "$$",
+      "estimatedCost": "₹300-800 per person",
+      "travelTypes": ["cultural", "leisure", "family", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Jaipur Budget Guide — 3 Days",
+    "category": "budget_template",
+    "subtype": "budget breakdown",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["budget", "3 days", "affordable", "cost breakdown", "backpacking"],
+    "content": "A 3-day budget trip to Jaipur can be done for approximately ₹5,000–₹8,000 per person. Accommodation: Budget hostels (₹400-800/night) such as Moustache Hostel or Zostel; mid-range hotels (₹1,500-3,000/night). Food: Street food meals (₹50-150), restaurant meals (₹300-600). Transport: Local auto-rickshaws (₹50-150 per ride), Uber/Ola available, full-day sightseeing auto (₹800-1,200). Attractions: Major forts and palaces (₹50-700 per entry), composite tickets available at ₹300. Shopping: Johari Bazaar for jewelry, Bapu Bazaar for textiles (budget ₹500-2,000). Tips: Visit free temples and parks, eat at local dhabas, use public buses for longer routes, book online for discounted entry tickets.",
+    "metadata": {
+      "estimatedCost": "₹5,000-8,000 total for 3 days",
+      "currency": "INR",
+      "travelTypes": ["solo", "adventure", "leisure"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Jaipur Seasonal Guide",
+    "category": "seasonal_info",
+    "subtype": "weather and timing",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["weather", "seasons", "best time", "climate", "monsoon", "summer", "winter"],
+    "content": "Jaipur has a semi-arid climate with extreme temperatures. Winter (October–February): Best time to visit with pleasant temperatures (8–25°C), clear skies, and comfortable sightseeing weather. Peak tourist season. Summer (March–June): Extremely hot (35–45°C), not ideal for outdoor sightseeing. Budget hotels may offer discounts. Monsoon (July–September): Moderate rainfall brings relief from heat, the landscape turns green, and forts look dramatic against cloudy skies. Fewer tourists and lower prices but some outdoor activities may be affected. Key events by season: Jaipur Literature Festival (January), Elephant Festival (March), Teej Festival (August), Diwali (October/November).",
+    "metadata": {
+      "bestTimeToVisit": ["October", "November", "December", "January", "February"],
+      "travelTypes": ["leisure", "cultural", "family", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Jaipur Literature Festival",
+    "category": "festival",
+    "subtype": "literary festival",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["festival", "literature", "culture", "January", "Diggi Palace", "free entry"],
+    "content": "The Jaipur Literature Festival (JLF) is the world's largest free literary festival, held annually in January at Diggi Palace. Founded in 2006, it attracts over 400,000 visitors across five days with sessions featuring Nobel laureates, Booker Prize winners, and leading thinkers from around the world. The festival is completely free to attend — no tickets required. Sessions cover literature, politics, history, art, music, and cinema. The venue also features a music stage, food stalls, and a book bazaar. Accommodations in Jaipur fill up fast during JLF week — book at least 2 months in advance. The festival also hosts evening music concerts (ticketed separately).",
+    "metadata": {
+      "bestTimeToVisit": ["January"],
+      "estimatedCost": "Free entry",
+      "duration": "5 days",
+      "travelTypes": ["cultural", "solo", "leisure"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Jaipur Hidden Gems",
+    "category": "hidden_gem",
+    "subtype": "off-the-beaten-path",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["hidden gems", "offbeat", "local", "secret spots", "non-touristy"],
+    "content": "Beyond the major forts and palaces, Jaipur has several lesser-known gems. Panna Meena Ka Kund is a stunning 16th-century stepwell near Amber Fort with a mesmerizing geometric pattern — perfect for photography (free entry). Galtaji Temple (Monkey Temple) is a natural spring temple complex in a mountain pass east of the city, featuring sacred water tanks and resident monkeys. Anokhi Museum of Hand Printing in Amber showcases Rajasthan's traditional block-printing textile heritage. The Chand Baori stepwell in Abhaneri (95 km from Jaipur) is one of the deepest and most photogenic stepwells in India with 3,500 narrow steps in 13 stories. Elchidham Temple is an ornate modern marble temple with detailed carvings, often missed by tourists.",
+    "metadata": {
+      "duration": "half day to full day",
+      "estimatedCost": "Free to ₹100",
+      "travelTypes": ["cultural", "solo", "adventure"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "3-Day Jaipur Heritage Itinerary",
+    "category": "itinerary",
+    "subtype": "3-day plan",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["itinerary", "3 days", "heritage", "sightseeing", "planned trip"],
+    "content": "Day 1 — Old City: Start at Hawa Mahal (early morning for best photos), walk to City Palace and Jantar Mantar, lunch at LMB restaurant, explore Johari Bazaar and Bapu Bazaar, evening at Nahargarh Fort for sunset. Day 2 — Amber & Beyond: Morning visit to Amber Fort (arrive by 8 AM to avoid crowds), walk to Panna Meena Ka Kund stepwell, visit Jaigarh Fort, lunch at 1135 AD restaurant in Amber Fort, afternoon at Jal Mahal (photo stop), evening at Chokhi Dhani for Rajasthani dinner and cultural show. Day 3 — Culture & Craft: Morning at Albert Hall Museum, Birla Mandir temple, lunch at Tapri Central café, visit Anokhi Museum of Hand Printing, afternoon shopping at MI Road and Tripolia Bazaar, farewell dinner at Bar Palladio for Indo-Italian cuisine in a palace setting.",
+    "metadata": {
+      "duration": "3 days",
+      "estimatedCost": "₹5,000-12,000 per person",
+      "travelTypes": ["cultural", "leisure", "solo", "family"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Jaipur Emergency Information",
+    "category": "emergency_info",
+    "subtype": "safety",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["emergency", "safety", "police", "hospital", "helpline"],
+    "content": "Emergency contacts for Jaipur: Police: 100 or 112 (unified emergency number). Tourist Police: 0141-2630527. Ambulance: 108 (free government service). Fire: 101. SMS Hospital (government): 0141-2518501 — largest government hospital. Fortis Escorts Hospital: 0141-2547000 — major private hospital. Narayana Hospital: 0141-2285555. Tourist Helpline (Rajasthan Tourism): 1363. Women Helpline: 1091. Jaipur is generally safe for tourists, but take standard precautions: avoid isolated areas at night, use registered taxis (Uber/Ola preferred), agree on auto-rickshaw fares before riding, keep valuables secure in crowded bazaars, and stay hydrated in summer. Most hospitals accept international insurance or cash payment.",
+    "metadata": {
+      "phoneNumbers": ["100", "112", "108", "0141-2630527", "1363"],
+      "travelTypes": ["leisure", "business", "adventure", "cultural", "family", "solo"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Jaipur Travel Planning Tips",
+    "category": "planning_rule",
+    "subtype": "practical tips",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["planning", "tips", "practical", "transport", "booking"],
+    "content": "Essential planning rules for a Jaipur trip: Book accommodations early during peak season (November–February) and festival periods. Start sightseeing early (8 AM) to avoid heat and crowds, especially at Amber Fort. Carry a scarf or shawl for temple visits. Download Uber and Ola apps for reliable transport. Buy a composite ticket (₹300) covering Amber Fort, Nahargarh Fort, Hawa Mahal, Jantar Mantar, and Albert Hall Museum — valid for 2 days and much cheaper than individual tickets. Bargain at bazaars (start at 40-50% of quoted price). Carry cash for street food and small shops. Pre-book Chokhi Dhani for dinner. Allow at least 2 full days for main sights, 3 days for a relaxed visit. Jaipur can be combined with Jodhpur (5 hours) or Udaipur (6 hours) for a Rajasthan circuit.",
+    "metadata": {
+      "travelTypes": ["leisure", "cultural", "family", "solo", "adventure"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "General Travel Tip — Haggling in Indian Bazaars",
+    "category": "travel_tip",
+    "subtype": "shopping",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["tip", "shopping", "haggling", "bazaar", "bargaining", "market"],
+    "content": "Haggling is expected and customary in Jaipur's bazaars and most markets across India. The initial price quoted to tourists is typically 2–4x the actual fair price. Start by offering 30-40% of the quoted price and negotiate upward. Always remain friendly and smiling — haggling is a social interaction, not a confrontation. Walk away if the price is too high — the seller will often call you back with a lower offer. Compare prices at multiple shops before buying. Fixed-price government emporiums (like Rajasthali) offer fair prices without haggling but may be slightly higher than bazaar prices after good bargaining. Tip: buy multiple items from the same vendor for a better overall discount.",
+    "metadata": {
+      "travelTypes": ["leisure", "cultural", "solo", "family"]
+    },
+    "source": "seed"
+  },
+  {
+    "title": "Rambagh Palace Hotel Area",
+    "category": "hotel",
+    "subtype": "luxury area",
+    "country": "India",
+    "city": "Jaipur",
+    "tags": ["luxury", "hotel", "palace", "heritage", "accommodation", "taj"],
+    "content": "The Rambagh Palace area in central Jaipur is one of the city's most prestigious neighborhoods. The Rambagh Palace itself, now a Taj Hotel, is a former royal residence converted into one of India's finest luxury hotels with rates starting at ₹25,000/night. The surrounding area offers a mix of heritage hotels and modern accommodations. Nearby options include ITC Rajputana (₹5,000-10,000/night), Jai Mahal Palace by Taj (₹12,000-20,000/night), and several boutique haveli-style hotels (₹2,000-5,000/night). The area is centrally located with easy access to the old city, C-Scheme market, and major attractions. Budget travelers can find guesthouses in the nearby Bani Park area (₹800-2,000/night) with good connectivity.",
+    "metadata": {
+      "priceLevel": "$$-$$$$",
+      "estimatedCost": "₹800-25,000+ per night",
+      "travelTypes": ["leisure", "business", "family"]
+    },
+    "source": "seed"
+  }
+]
