@@ -71,6 +71,7 @@
 import { generateEmbedding } from '../../services/embedding.js';
 import { VectorRetrievalService } from './vector-retrieval.service.js';
 import { TextSearchService } from './text-search.service.js';
+import { RerankerService } from './reranker.service.js';
 import { KnowledgeSourceType } from '../types/vector.types.js';
 import type {
   HybridSearchConfig,
@@ -83,7 +84,6 @@ import {
   HYBRID_VECTOR_WEIGHT,
   HYBRID_TEXT_WEIGHT,
   HYBRID_MIN_SCORE,
-  HYBRID_MAX_RESULTS,
   HYBRID_RRF_K,
 } from '../types/hybrid-search.constants.js';
 import Logger from '../../utils/logger.js';
@@ -116,7 +116,6 @@ export class HybridRetrievalService {
     const vectorWeight = config.vectorWeight ?? HYBRID_VECTOR_WEIGHT;
     const textWeight = config.textWeight ?? HYBRID_TEXT_WEIGHT;
     const minScore = config.minScore ?? HYBRID_MIN_SCORE;
-    const maxResults = config.maxResults ?? HYBRID_MAX_RESULTS;
     const rrfK = config.rrfK ?? HYBRID_RRF_K;
 
     logger.info(`🔀 Hybrid retrieval starting${userId ? ` for user ${userId}` : ''}`);
@@ -219,11 +218,15 @@ export class HybridRetrievalService {
     // ── Step 6: Score threshold filter ──────────────────────────────────────────
     const filtered = deduplicated.filter(r => r.fusedScore >= minScore);
 
-    // ── Step 7: Limit results ──────────────────────────────────────────────────
-    const limited = filtered.slice(0, maxResults);
+    // ── Step 7: Batched Cross-Encoder Reranking ────────────────────────────────
+    // We pass the full filtered set; RerankerService will take topK candidates internally.
+    const { documents: rerankedDocs, metrics: rerankMetrics } = await RerankerService.rerank(
+      filtered,
+      query
+    );
 
     // ── Step 8: Group by sourceType (preserve existing output shape) ────────────
-    const grouped = this.groupBySourceType(limited);
+    const grouped = this.groupBySourceType(rerankedDocs);
 
     // ── Structured logging ─────────────────────────────────────────────────────
     const totalTimeMs = Date.now() - totalStart;
@@ -251,7 +254,7 @@ export class HybridRetrievalService {
       fusionTimeMs,
       vectorHits: vectorResults.length,
       textHits: textResults.length,
-      mergedCount: limited.length,
+      mergedCount: rerankMetrics.finalReturned,
       overlapCount,
       vectorOnlyCount,
       textOnlyCount,
@@ -267,7 +270,8 @@ export class HybridRetrievalService {
       `Avg Score: ${metrics.averageFusedScore}, ` +
       `Sources [Vector: ${metrics.vectorOnlyCount} | Text: ${metrics.textOnlyCount} | Both: ${metrics.overlapCount}], ` +
       `Filtered [Dedup: -${metrics.removedByDeduplication} | Threshold: -${metrics.removedByThreshold}], ` +
-      `Final Returned: ${metrics.mergedCount}`
+      `Final Returned: ${metrics.mergedCount}` + 
+      (rerankMetrics.wasReranked ? ` (after reranking)` : '')
     );
 
     return grouped;

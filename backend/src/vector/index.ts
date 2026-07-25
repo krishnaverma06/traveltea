@@ -95,6 +95,7 @@ export {
 
 export { TextSearchService } from './services/text-search.service.js';
 export { HybridRetrievalService } from './services/hybrid-retrieval.service.js';
+export { RerankerService } from './services/reranker.service.js';
 
 export {
   HYBRID_VECTOR_WEIGHT,
@@ -105,6 +106,8 @@ export {
   HYBRID_RRF_K,
   TEXT_SEARCH_INDEX_NAME as HYBRID_TEXT_SEARCH_INDEX_NAME,
 } from './types/hybrid-search.constants.js';
+export * from './types/reranker.types.js';
+export * from './types/reranker.constants.js';
 
 export type {
   HybridSearchConfig,
