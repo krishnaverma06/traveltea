@@ -128,10 +128,10 @@ const ItineraryPage = () => {
       // tripData.generatedItinerary.itinerary (see `itinerary` above).
       const generatedItinerary = {
         days: itinerary.days,
-        tripMetadata: itinerary.tripMetadata || {
+        tripMetadata: {
           destination: cityNames,
-          numberOfPeople: tripData.people,
-          travelers: tripData.people,
+          numberOfPeople: tripData.people || 1,
+          travelers: tripData.people || 1,
           budget: {
             perDay: tripData.budget?.total
               ? Math.round(
@@ -149,6 +149,7 @@ const ItineraryPage = () => {
               travel: tripData.budget?.travel || 0,
             },
           },
+          ...(itinerary.tripMetadata || {})
         },
       };
 
@@ -161,14 +162,20 @@ const ItineraryPage = () => {
             : tripData.startDate,
         cities: tripData.cities,
         totalDays:
-          tripData.cities?.reduce((sum, city) => sum + city.days, 0) || 0,
-        people: tripData.people,
-        travelType: tripData.travelType,
-        budget: tripData.budget,
+          tripData.cities?.reduce((sum, city) => sum + city.days, 0) || tripData.totalDays || 1,
+        people: tripData.people || 1,
+        travelType: tripData.travelType || "leisure",
+        budget: tripData.budget || {
+          total: 5000,
+          travel: 40,
+          accommodation: 30,
+          food: 20,
+          events: 10,
+        },
         budgetMode: tripData.budgetMode || "capped",
         generatedItinerary,
         tags: [
-          tripData.travelType,
+          tripData.travelType || "leisure",
           ...(tripData.cities?.map((c) => c.name) || []),
         ],
       };
