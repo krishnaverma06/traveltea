@@ -20,6 +20,11 @@ import {
   getCategoryDisplayName,
 } from "../config/opentripmap-categories.js";
 
+// RAG Imports
+import { generateEmbedding } from "../services/embedding.js";
+import { VectorRetrievalService } from "../vector/services/vector-retrieval.service.js";
+import { PromptBuilder } from "../vector/utils/prompt-builder.js";
+
 /**
  * Define agent state using Annotation API
  */
@@ -65,6 +70,10 @@ const AgentStateAnnotation = Annotation.Root({
     default: () => undefined,
   }),
   conversationId: Annotation<string | undefined>({
+    reducer: (left, right) => right ?? left,
+    default: () => undefined,
+  }),
+  ragContext: Annotation<string | undefined>({
     reducer: (left, right) => right ?? left,
     default: () => undefined,
   }),
@@ -475,18 +484,24 @@ export class TravelAgent {
           formattedResponse = await this.summarizeWebSearch(
             state.userQuery,
             placeDetails,
+            state.ragContext
           );
         } else {
           formattedResponse = this.formatPlaceDetails(placeDetails);
         }
       } else {
         // No tool results, use LLM to generate conversational response
+        const combinedSystemPrompt = state.ragContext 
+          ? `${TRAVEL_AGENT_SYSTEM_PROMPT}\n\n${state.ragContext}` 
+          : TRAVEL_AGENT_SYSTEM_PROMPT;
+          
         const messages = [
-          new SystemMessage(TRAVEL_AGENT_SYSTEM_PROMPT),
+          new SystemMessage(combinedSystemPrompt),
           new HumanMessage(state.userQuery),
         ];
+
         console.log(
-          "🤖 [FORMATTER] Calling GPT-4o-mini for conversational response...",
+          "🤖 [FORMATTER] Calling Gemini with RAG context for conversational response...",
         );
         const response = await this.model.invoke(messages);
         formattedResponse = response.content as string;
@@ -642,6 +657,7 @@ export class TravelAgent {
   private async summarizeWebSearch(
     userQuery: string,
     searchData: any,
+    ragContext?: string
   ): Promise<string> {
     const searchSummary = searchData.results
       .map((r: any, i: number) => `${i + 1}. ${r.title}\n${r.snippet}`)
@@ -668,10 +684,16 @@ Rules:
 - Write like an experienced travel guide.
 `;
 
-    const response = await this.model.invoke([
-      new SystemMessage(TRAVEL_AGENT_SYSTEM_PROMPT),
+    const combinedSystemPrompt = ragContext 
+      ? `${TRAVEL_AGENT_SYSTEM_PROMPT}\n\n${ragContext}` 
+      : TRAVEL_AGENT_SYSTEM_PROMPT;
+
+    const messages = [
+      new SystemMessage(combinedSystemPrompt),
       new HumanMessage(prompt),
-    ]);
+    ];
+
+    const response = await this.model.invoke(messages);
 
     return response.content as string;
   }
@@ -836,14 +858,31 @@ Rules:
   /**
    * Main method: Process user query and return response
    */
-  async chat(userQuery: string, conversationId?: string): Promise<any> {
+  async chat(userQuery: string, conversationId?: string, userId?: string): Promise<any> {
     try {
       console.log(`\n🤖 Processing: "${userQuery}"\n`);
+
+      // ─── RAG Pipeline ─────────────────────────────────────────────────────────
+      let ragContext: string | undefined = undefined;
+      try {
+        console.log(`🔍 [RAG] Generating embedding for user query...`);
+        const queryEmbedding = await generateEmbedding(userQuery);
+        
+        console.log(`🔍 [RAG] Retrieving semantic knowledge...`);
+        const retrievedDocs = await VectorRetrievalService.retrieveRelevantKnowledge(queryEmbedding, userId);
+        
+        console.log(`📝 [RAG] Building prompt context...`);
+        ragContext = PromptBuilder.buildRagContextPrompt(retrievedDocs);
+      } catch (ragError: any) {
+        console.error(`⚠️ [RAG] Pipeline failed, proceeding without context: ${ragError.message}`);
+      }
+      // ────────────────────────────────────────────────────────────────────────
 
       const initialState: AgentState = {
         messages: [],
         userQuery,
         conversationId,
+        ragContext, // Inject RAG context into the state
         timestamp: new Date(),
         intent: undefined,
         searchResults: undefined,

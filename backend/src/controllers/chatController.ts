@@ -72,7 +72,7 @@ export async function sendMessage(req: Request, res: Response) {
     });
     
     const agentResult  = await Promise.race([
-      travelAgent.chat(message, convId),
+      travelAgent.chat(message, convId, req.userId),
       timeoutPromise
     ]);
 
