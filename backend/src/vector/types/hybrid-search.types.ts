@@ -121,6 +121,16 @@ export interface HybridSearchMetrics {
   mergedCount: number;
   /** Number of documents found by both systems */
   overlapCount: number;
+  /** Number of documents found only by vector search */
+  vectorOnlyCount: number;
+  /** Number of documents found only by text search */
+  textOnlyCount: number;
+  /** Number of documents removed during deduplication */
+  removedByDeduplication: number;
+  /** Number of documents removed because their score was below minScore */
+  removedByThreshold: number;
+  /** Average fused score of all documents before threshold filter */
+  averageFusedScore: string;
 }
 
 // ─── Grouped Results ───────────────────────────────────────────────────────────

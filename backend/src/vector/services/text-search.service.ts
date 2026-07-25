@@ -24,6 +24,11 @@ import {
   TEXT_SEARCH_USER_TRIPS_LIMIT,
   TEXT_SEARCH_GLOBAL_KNOWLEDGE_LIMIT,
   TEXT_SEARCH_SEARCH_KNOWLEDGE_LIMIT,
+  TITLE_BOOST,
+  CONTENT_BOOST,
+  TAGS_BOOST,
+  CITY_BOOST,
+  COUNTRY_BOOST,
 } from '../types/hybrid-search.constants.js';
 import Logger from '../../utils/logger.js';
 
@@ -106,45 +111,56 @@ export class TextSearchService {
                   text: {
                     query: query,
                     path: 'title',
-                    score: { boost: { value: 3 } }, // Title matches are most relevant
+                    score: { boost: { value: TITLE_BOOST } },
+                    fuzzy: { maxEdits: 2, prefixLength: 2 },
                   },
                 },
                 {
                   text: {
                     query: query,
                     path: 'content',
-                    score: { boost: { value: 1 } }, // Content is the main body
+                    score: { boost: { value: CONTENT_BOOST } },
+                    fuzzy: { maxEdits: 2, prefixLength: 2 },
                   },
                 },
                 {
                   text: {
                     query: query,
                     path: 'tags',
-                    score: { boost: { value: 2 } }, // Tags are curated keywords
+                    score: { boost: { value: TAGS_BOOST } },
+                    fuzzy: { maxEdits: 2, prefixLength: 2 },
                   },
                 },
                 {
                   text: {
                     query: query,
                     path: 'city',
-                    score: { boost: { value: 2.5 } }, // Location matches are high signal
+                    score: { boost: { value: CITY_BOOST } },
+                    fuzzy: { maxEdits: 2, prefixLength: 2 },
                   },
                 },
                 {
                   text: {
                     query: query,
                     path: 'country',
-                    score: { boost: { value: 2 } },
+                    score: { boost: { value: COUNTRY_BOOST } },
+                    fuzzy: { maxEdits: 2, prefixLength: 2 },
                   },
                 },
               ],
               filter: filterClauses,
               minimumShouldMatch: 1,
             },
+            highlight: {
+              path: ['title', 'content', 'tags', 'city', 'country'],
+            },
           },
         },
         {
-          $addFields: { score: { $meta: 'searchScore' } },
+          $addFields: { 
+            score: { $meta: 'searchScore' },
+            highlights: { $meta: 'searchHighlights' }
+          },
         },
         {
           $limit: limit,
