@@ -44,15 +44,15 @@
  *
  * ────────────────────────────────────────────────────────────────────────────────
  *
- * WHY RECIPROCAL RANK FUSION (RRF)
+ * WHY WEIGHTED RECIPROCAL RANK FUSION (RRF)
  *
  * RRF merges ranked lists without requiring score normalization.
- * This is critical because:
+ * This implementation intentionally uses Weighted RRF because:
  *   - Vector cosine similarity scores range [0, 1]
  *   - BM25 text search scores are unbounded positive numbers
  *   - Directly comparing or averaging these scores is meaningless
  *
- * RRF formula: score(d) = Σ (weight_i / (k + rank_i(d)))
+ * Weighted RRF formula: score(d) = Σ (weight_i / (k + rank_i(d)))
  *
  * Where:
  *   - k = smoothing constant (default 60, from Cormack et al. 2009)
@@ -227,7 +227,22 @@ export class HybridRetrievalService {
 
     // ── Structured logging ─────────────────────────────────────────────────────
     const totalTimeMs = Date.now() - totalStart;
-    const overlapCount = fusedResults.filter(r => r.source === 'both').length;
+    
+    let vectorOnlyCount = 0;
+    let textOnlyCount = 0;
+    let overlapCount = 0;
+    let totalFusedScore = 0;
+    
+    fusedResults.forEach(r => {
+      if (r.source === 'vector') vectorOnlyCount++;
+      else if (r.source === 'text') textOnlyCount++;
+      else if (r.source === 'both') overlapCount++;
+      totalFusedScore += r.fusedScore;
+    });
+
+    const averageFusedScore = fusedResults.length > 0 ? (totalFusedScore / fusedResults.length).toFixed(4) : '0';
+    const removedByDeduplication = fusedResults.length - deduplicated.length;
+    const removedByThreshold = deduplicated.length - filtered.length;
 
     const metrics: HybridSearchMetrics = {
       totalTimeMs,
@@ -238,15 +253,21 @@ export class HybridRetrievalService {
       textHits: textResults.length,
       mergedCount: limited.length,
       overlapCount,
+      vectorOnlyCount,
+      textOnlyCount,
+      removedByDeduplication,
+      removedByThreshold,
+      averageFusedScore
     };
 
     logger.info(
       `✅ Hybrid retrieval complete in ${metrics.totalTimeMs}ms. ` +
-      `Vector: ${metrics.vectorHits} hits (${metrics.vectorTimeMs}ms), ` +
-      `Text: ${metrics.textHits} hits (${metrics.textTimeMs}ms), ` +
-      `Fusion: ${metrics.fusionTimeMs}ms, ` +
-      `Merged: ${metrics.mergedCount}, ` +
-      `Overlap: ${metrics.overlapCount}`
+      `Vector: ${metrics.vectorHits}, ` +
+      `Text: ${metrics.textHits}, ` +
+      `Avg Score: ${metrics.averageFusedScore}, ` +
+      `Sources [Vector: ${metrics.vectorOnlyCount} | Text: ${metrics.textOnlyCount} | Both: ${metrics.overlapCount}], ` +
+      `Filtered [Dedup: -${metrics.removedByDeduplication} | Threshold: -${metrics.removedByThreshold}], ` +
+      `Final Returned: ${metrics.mergedCount}`
     );
 
     return grouped;

@@ -73,6 +73,23 @@ export const HYBRID_RRF_K = parseInt(
   process.env.HYBRID_RRF_K || '60', 10
 );
 
+// ─── Text Search Boosts ────────────────────────────────────────────────────────
+
+/** Boost for title matches. Highest priority. */
+export const TITLE_BOOST = parseFloat(process.env.TITLE_BOOST || '3');
+
+/** Boost for content matches. */
+export const CONTENT_BOOST = parseFloat(process.env.CONTENT_BOOST || '1');
+
+/** Boost for tag matches. */
+export const TAGS_BOOST = parseFloat(process.env.TAGS_BOOST || '2');
+
+/** Boost for city matches. */
+export const CITY_BOOST = parseFloat(process.env.CITY_BOOST || '2.5');
+
+/** Boost for country matches. */
+export const COUNTRY_BOOST = parseFloat(process.env.COUNTRY_BOOST || '2');
+
 // ─── Atlas Search Index ────────────────────────────────────────────────────────
 
 /**
