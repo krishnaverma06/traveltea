@@ -21,8 +21,7 @@ import {
 } from "../config/opentripmap-categories.js";
 
 // RAG Imports
-import { generateEmbedding } from "../services/embedding.js";
-import { VectorRetrievalService } from "../vector/services/vector-retrieval.service.js";
+import { HybridRetrievalService } from "../vector/services/hybrid-retrieval.service.js";
 import { PromptBuilder } from "../vector/utils/prompt-builder.js";
 
 /**
@@ -862,19 +861,16 @@ Rules:
     try {
       console.log(`\n🤖 Processing: "${userQuery}"\n`);
 
-      // ─── RAG Pipeline ─────────────────────────────────────────────────────────
+      // ─── RAG Pipeline (Hybrid Search: Vector + Text + RRF) ────────────────────
       let ragContext: string | undefined = undefined;
       try {
-        console.log(`🔍 [RAG] Generating embedding for user query...`);
-        const queryEmbedding = await generateEmbedding(userQuery);
-        
-        console.log(`🔍 [RAG] Retrieving semantic knowledge...`);
-        const retrievedDocs = await VectorRetrievalService.retrieveRelevantKnowledge(queryEmbedding, userId);
+        console.log(`🔀 [RAG] Running hybrid retrieval (vector + text search)...`);
+        const retrievedDocs = await HybridRetrievalService.retrieve(userQuery, userId);
         
         console.log(`📝 [RAG] Building prompt context...`);
         ragContext = PromptBuilder.buildRagContextPrompt(retrievedDocs);
       } catch (ragError: any) {
-        console.error(`⚠️ [RAG] Pipeline failed, proceeding without context: ${ragError.message}`);
+        console.error(`⚠️ [RAG] Hybrid pipeline failed, proceeding without context: ${ragError.message}`);
       }
       // ────────────────────────────────────────────────────────────────────────
 

@@ -90,3 +90,26 @@ export {
   ingestFromCSV,
   ingestManual,
 } from './ingestion/ingestion.pipeline.js';
+
+// ─── Hybrid Search ──────────────────────────────────────────────────────────────
+
+export { TextSearchService } from './services/text-search.service.js';
+export { HybridRetrievalService } from './services/hybrid-retrieval.service.js';
+
+export {
+  HYBRID_VECTOR_WEIGHT,
+  HYBRID_TEXT_WEIGHT,
+  HYBRID_TOP_K,
+  HYBRID_MIN_SCORE,
+  HYBRID_MAX_RESULTS,
+  HYBRID_RRF_K,
+  TEXT_SEARCH_INDEX_NAME as HYBRID_TEXT_SEARCH_INDEX_NAME,
+} from './types/hybrid-search.constants.js';
+
+export type {
+  HybridSearchConfig,
+  HybridSearchResult,
+  HybridSearchMetrics,
+  TextSearchResult,
+  GroupedRetrievalResults,
+} from './types/hybrid-search.types.js';

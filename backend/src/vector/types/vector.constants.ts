@@ -23,6 +23,9 @@ export const VECTOR_COLLECTION_NAME = 'vector_documents';
 /** Atlas Vector Search index name (must match the index created in Atlas UI) */
 export const VECTOR_INDEX_NAME = 'vector_index';
 
+/** Atlas Search index name for full-text keyword search (hybrid search) */
+export const TEXT_SEARCH_INDEX_NAME = 'text_search_index';
+
 /** Embedding vector dimensions — matches existing EMBEDDING_DIMENSIONS in services/embedding.ts */
 export const EMBEDDING_DIMENSIONS = 256;
 
