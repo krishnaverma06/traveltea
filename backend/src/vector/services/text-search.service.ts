@@ -69,7 +69,11 @@ export class TextSearchService {
     limit: number,
     userId?: string,
   ): Promise<any[]> {
-    if (limit <= 0 || !query.trim()) return [];
+    if (typeof limit !== 'number' || !Number.isFinite(limit) || limit <= 0) {
+      logger.warn(`Invalid limit passed to TextSearchService.searchLayer (${sourceType}): ${limit}`);
+      return [];
+    }
+    if (!query.trim()) return [];
 
     // Cannot search user-specific layers without a user ID
     if (!userId && (
@@ -202,13 +206,18 @@ export class TextSearchService {
     userId?: string,
     config: TextSearchLayerConfig = {},
   ): Promise<any[]> {
-    const finalConfig = { ...DEFAULT_TEXT_CONFIG, ...config };
+    const limits = {
+      userProfileLimit: config.userProfileLimit ?? DEFAULT_TEXT_CONFIG.userProfileLimit,
+      userTripsLimit: config.userTripsLimit ?? DEFAULT_TEXT_CONFIG.userTripsLimit,
+      globalKnowledgeLimit: config.globalKnowledgeLimit ?? DEFAULT_TEXT_CONFIG.globalKnowledgeLimit,
+      searchKnowledgeLimit: config.searchKnowledgeLimit ?? DEFAULT_TEXT_CONFIG.searchKnowledgeLimit,
+    };
 
     const [userProfile, userTrips, globalKnowledge, searchKnowledge] = await Promise.all([
-      this.searchLayer(query, KnowledgeSourceType.USER_PROFILE, finalConfig.userProfileLimit, userId),
-      this.searchLayer(query, KnowledgeSourceType.USER_TRIPS, finalConfig.userTripsLimit, userId),
-      this.searchLayer(query, KnowledgeSourceType.GLOBAL_KNOWLEDGE, finalConfig.globalKnowledgeLimit),
-      this.searchLayer(query, KnowledgeSourceType.SEARCH_KNOWLEDGE, finalConfig.searchKnowledgeLimit),
+      this.searchLayer(query, KnowledgeSourceType.USER_PROFILE, limits.userProfileLimit, userId),
+      this.searchLayer(query, KnowledgeSourceType.USER_TRIPS, limits.userTripsLimit, userId),
+      this.searchLayer(query, KnowledgeSourceType.GLOBAL_KNOWLEDGE, limits.globalKnowledgeLimit),
+      this.searchLayer(query, KnowledgeSourceType.SEARCH_KNOWLEDGE, limits.searchKnowledgeLimit),
     ]);
 
     const allResults = [...userProfile, ...userTrips, ...globalKnowledge, ...searchKnowledge];

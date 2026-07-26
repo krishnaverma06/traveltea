@@ -19,7 +19,7 @@ const DEFAULT_CONFIG: RetrievalConfig = {
   userTripsLimit: 5,
   globalKnowledgeLimit: 5,
   searchKnowledgeLimit: 5,
-  minScore: 0.65, // Generous default for finding adjacent contexts
+  minScore: 0.5, // Lowered to capture conversational queries about personal data
 };
 
 export class VectorRetrievalService {
@@ -33,7 +33,10 @@ export class VectorRetrievalService {
     userId?: string,
     minScore: number = 0.65
   ): Promise<any[]> {
-    if (limit <= 0) return [];
+    if (typeof limit !== 'number' || !Number.isFinite(limit) || limit <= 0) {
+      logger.warn(`Invalid limit passed to VectorRetrievalService.searchLayer (${sourceType}): ${limit}`);
+      return [];
+    }
 
     const filter: any = { sourceType };
     if (userId) {
@@ -81,7 +84,13 @@ export class VectorRetrievalService {
     userId?: string,
     config: Partial<RetrievalConfig> = {}
   ) {
-    const finalConfig = { ...DEFAULT_CONFIG, ...config };
+    const finalConfig = {
+      userProfileLimit: config.userProfileLimit ?? DEFAULT_CONFIG.userProfileLimit,
+      userTripsLimit: config.userTripsLimit ?? DEFAULT_CONFIG.userTripsLimit,
+      globalKnowledgeLimit: config.globalKnowledgeLimit ?? DEFAULT_CONFIG.globalKnowledgeLimit,
+      searchKnowledgeLimit: config.searchKnowledgeLimit ?? DEFAULT_CONFIG.searchKnowledgeLimit,
+      minScore: config.minScore ?? DEFAULT_CONFIG.minScore,
+    };
     const startTime = Date.now();
 
     logger.info(`🔍 Retrieving RAG context${userId ? ` for user ${userId}` : ''}`);

@@ -72,9 +72,9 @@ export class IntentDetector {
   /**
    * Detect user intent from query with category extraction
    */
-  async detectIntent(userQuery: string, conversationHistory?: string[], travelType?: string): Promise<DetectedIntent> {
+  async detectIntent(userQuery: string, conversationHistory?: string[], travelType?: string, hasRagContext: boolean = false): Promise<DetectedIntent> {
     try {
-      const systemPrompt = this.buildSystemPrompt();
+      const systemPrompt = this.buildSystemPrompt(hasRagContext);
       const userPrompt = this.buildUserPrompt(userQuery, conversationHistory);
 
       const response = await this.model.invoke([
@@ -116,8 +116,8 @@ export class IntentDetector {
   /**
    * Build system prompt for intent detection
    */
-  private buildSystemPrompt(): string {
-    return `You are an expert travel assistant intent classifier. Your job is to analyze user queries about travel and determine:
+  private buildSystemPrompt(hasRagContext: boolean = false): string {
+    let prompt = `You are an expert travel assistant intent classifier. Your job is to analyze user queries about travel and determine:
 1. What the user wants to do (primary intent)
 2. What information they're asking about (entities)
 3. Which tools should be called to help them (tools_to_call)
@@ -175,6 +175,20 @@ Respond with ONLY a valid JSON object matching this schema:
   "confidence": 0.0-1.0,
   "reasoning": "why this intent was chosen"
 }`;
+
+    if (hasRagContext) {
+      prompt += `
+
+IMPORTANT CONTEXT NOTE: 
+The system has ALREADY run a retrieval pipeline (RAG) prior to this step.
+Relevant documents may already have been retrieved and are a valid information source.
+If the retrieved context is sufficient to answer the user's question, DO NOT classify the request as 'unknown' simply because there is no dedicated MCP tool.
+Use the retrieved context whenever possible.
+Only invoke MCP tools when external information is required, live information is needed, or an action/tool execution is necessary.
+If the retrieved context already answers the question, classify the intent as 'casual_chat' (so the assistant will directly answer using the provided context) and set tools_to_call to [].`;
+    }
+
+    return prompt;
   }
 
   /**

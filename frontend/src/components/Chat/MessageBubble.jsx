@@ -48,6 +48,7 @@ export function MessageBubble({
   content,
   timestamp,
   itinerary,
+  sources,
   onViewItinerary,
 }) {
   const isUser = role === "user";
@@ -146,6 +147,27 @@ export function MessageBubble({
             <Calendar size={16} />
             View Itinerary
           </button>
+        )}
+
+        {/* Sources Collapsible */}
+        {isRevealDone && sources?.length > 0 && (
+          <div className="mt-2 w-full max-w-sm border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
+            <details className="group">
+              <summary className="flex cursor-pointer items-center justify-between px-3 py-2 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                <span>Sources Used ({sources.length})</span>
+                <span className="transition group-open:rotate-180">
+                  <svg fill="none" height="14" shapeRendering="geometricPrecision" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" viewBox="0 0 24 24" width="14"><path d="M6 9l6 6 6-6"></path></svg>
+                </span>
+              </summary>
+              <div className="border-t border-gray-200 dark:border-gray-700 px-3 py-2 text-xs text-gray-600 dark:text-gray-300">
+                <ul className="list-disc pl-4 space-y-1">
+                  {sources.map((source, idx) => (
+                    <li key={idx}>{source.title || source}</li>
+                  ))}
+                </ul>
+              </div>
+            </details>
+          </div>
         )}
       </div>
     </motion.div>

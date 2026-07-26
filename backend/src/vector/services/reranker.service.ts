@@ -27,7 +27,7 @@ export class RerankerService {
   private static getLLM(): ChatGoogleGenerativeAI {
     if (!this.llm) {
       this.llm = new ChatGoogleGenerativeAI({
-        model: 'gemini-1.5-flash',
+        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
         temperature: 0,
         maxOutputTokens: 2048,
         apiKey: process.env.GEMINI_API_KEY,
@@ -196,6 +196,8 @@ ${formatInstructions}`;
 
     } catch (error: any) {
       logger.warn(`⚠️ Reranking failed (${error.message}). Falling back to Hybrid Search ordering.`);
+      // Reset cached LLM instance so next call gets a fresh one
+      this.llm = null;
       return this.bypassReranking(candidates, config, startTime, error.message);
     }
   }

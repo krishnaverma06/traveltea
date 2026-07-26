@@ -161,8 +161,9 @@ export class TravelAgent {
   private async plannerNode(state: AgentState): Promise<Partial<AgentState>> {
     console.log("\n🧠 [PLANNER] Analyzing user query:", state.userQuery);
     try {
-      // Use LLM-based intent detector
-      const detectedIntent = await intentDetector.detectIntent(state.userQuery);
+      // Use LLM-based intent detector, passing awareness of RAG context
+      const hasRagContext = !!state.ragContext;
+      const detectedIntent = await intentDetector.detectIntent(state.userQuery, undefined, undefined, hasRagContext);
 
       console.log(
         "🎯 [PLANNER] Detected intent:",
@@ -220,7 +221,7 @@ export class TravelAgent {
             detectedCategories.length > 0
               ? detectedCategories
               : [this.extractCategory(userQuery)].filter(Boolean);
-              
+
           if (normalizedIntent === "search_hotels") {
             categories = ["accomodations"];
           }
@@ -490,10 +491,10 @@ export class TravelAgent {
         }
       } else {
         // No tool results, use LLM to generate conversational response
-        const combinedSystemPrompt = state.ragContext 
-          ? `${TRAVEL_AGENT_SYSTEM_PROMPT}\n\n${state.ragContext}` 
+        const combinedSystemPrompt = state.ragContext
+          ? `${TRAVEL_AGENT_SYSTEM_PROMPT}\n\n${state.ragContext}`
           : TRAVEL_AGENT_SYSTEM_PROMPT;
-          
+
         const messages = [
           new SystemMessage(combinedSystemPrompt),
           new HumanMessage(state.userQuery),
@@ -683,8 +684,8 @@ Rules:
 - Write like an experienced travel guide.
 `;
 
-    const combinedSystemPrompt = ragContext 
-      ? `${TRAVEL_AGENT_SYSTEM_PROMPT}\n\n${ragContext}` 
+    const combinedSystemPrompt = ragContext
+      ? `${TRAVEL_AGENT_SYSTEM_PROMPT}\n\n${ragContext}`
       : TRAVEL_AGENT_SYSTEM_PROMPT;
 
     const messages = [
@@ -866,9 +867,24 @@ Rules:
       try {
         console.log(`🔀 [RAG] Running hybrid retrieval (vector + text search)...`);
         const retrievedDocs = await HybridRetrievalService.retrieve(userQuery, userId);
-        
+
         console.log(`📝 [RAG] Building prompt context...`);
         ragContext = PromptBuilder.buildRagContextPrompt(retrievedDocs);
+
+        console.log(`\n--- DEBUG: RAG CONTEXT CONTENTS ---`);
+        console.log(`Profile docs: ${retrievedDocs.userProfile.length}`);
+        retrievedDocs.userProfile.forEach(d => console.log(`  [PROFILE] ${d.title}: ${d.content.substring(0, 200)}`));
+        console.log(`Trips docs: ${retrievedDocs.userTrips.length}`);
+        retrievedDocs.userTrips.forEach(d => console.log(`  [TRIP] ${d.title}: ${d.content.substring(0, 200)}`));
+        console.log(`Global docs: ${retrievedDocs.globalKnowledge.length}`);
+        retrievedDocs.globalKnowledge.forEach(d => console.log(`  [GLOBAL] ${d.title}: ${d.content.substring(0, 200)}`));
+        console.log(`Search docs: ${retrievedDocs.searchKnowledge.length}`);
+        retrievedDocs.searchKnowledge.forEach(d => console.log(`  [SEARCH] ${d.title}: ${d.content.substring(0, 200)}`));
+        console.log(`Context total length: ${ragContext.length}`);
+        console.log(`Context contains 'paris'? ${ragContext.toLowerCase().includes('paris')}`);
+        console.log(`\n--- FULL RAG CONTEXT SENT TO GEMINI ---`);
+        console.log(ragContext);
+        console.log(`--- END DEBUG ---\n`);
       } catch (ragError: any) {
         console.error(`⚠️ [RAG] Hybrid pipeline failed, proceeding without context: ${ragError.message}`);
       }
@@ -912,36 +928,36 @@ Rules:
    * Generate itinerary with structured trip context
    * This is optimized for the onboarding flow where we have complete trip details
    */
-   async generateItineraryWithContext(tripContext: any): Promise<any> {
+  async generateItineraryWithContext(tripContext: any): Promise<any> {
     try {
       console.log('\n🎯 [CONTEXT ITINERARY] Generating with full trip context');
-      
+
       const { TRAVEL_TYPE_PREFERENCES, calculateDailyBudget } = await import('../types/tripContext.js');
-      
+
       // Calculate total days from cities
       const totalDays = tripContext.cities.reduce((sum: number, city: any) => sum + city.days, 0);
-      
+
       // Get daily budget breakdown
       const dailyBudget = calculateDailyBudget(
         tripContext.budget,
         tripContext.budgetMode,
         totalDays
       );
-      
+
       // Get travel type preferences
       const travelPrefs = TRAVEL_TYPE_PREFERENCES[tripContext.travelType as keyof typeof TRAVEL_TYPE_PREFERENCES];
-      
+
       console.log('💰 Daily budget:', dailyBudget);
       console.log('🎨 Travel preferences:', travelPrefs);
       console.log('🗓️ Total days:', totalDays);
       console.log('🏙️ Cities:', tripContext.cities.map((c: any) => `${c.name} (${c.days} days)`));
-      
+
       // Collect all places from all cities first for better distribution
       const allCityPlaces: Map<string, any> = new Map();
-      
+
       for (const city of tripContext.cities) {
         console.log(`\n🔍 Fetching enhanced places for ${city.name}`);
-        
+
         // Get city coordinates
         const coords = await itineraryBuilder.getDestinationCoords(city.name);
         if (coords) {
@@ -953,30 +969,30 @@ Rules:
             tripContext.travelType,
             true // Include hotels
           );
-          
+
           allCityPlaces.set(city.name, {
             places: cityPlaces,
             coords: coords,
             days: city.days
           });
-          
+
           console.log(`✅ Found ${cityPlaces.total} enhanced places in ${city.name} (${cityPlaces.activities.length} activities, ${cityPlaces.restaurants.length} restaurants, ${cityPlaces.hotels.length} hotels)`);
         }
       }
-      
+
       // Build itinerary with intelligent distribution
       const allDays: any[] = [];
       let currentDayNumber = 1;
-      
+
       // Global tracking to prevent repetition across all days
       const globalUsedPlaces = new Set<string>();
-      
+
       for (const city of tripContext.cities) {
         const cityData = allCityPlaces.get(city.name);
         if (!cityData) continue;
-        
+
         console.log(`\n�️ Building ${city.days} days for ${city.name}`);
-        
+
         // Build city-specific itinerary with global state tracking
         const cityItinerary = await itineraryBuilder.buildItineraryWithContextAndState(
           city.name,
@@ -993,18 +1009,18 @@ Rules:
             startingDayNumber: currentDayNumber
           }
         );
-        
+
         if (cityItinerary && cityItinerary.days) {
           // Add city-specific days to all days
           cityItinerary.days.forEach((day: any) => {
             day.city = city.name;
             allDays.push(day);
           });
-          
+
           currentDayNumber += city.days;
         }
       }
-      
+
       // Create complete itinerary
       const completeItinerary = {
         tripMetadata: {
@@ -1021,20 +1037,20 @@ Rules:
         },
         days: allDays
       };
-      
+
       // Format the response
       const formattedResponse = this.formatItineraryWithContext(completeItinerary, tripContext);
-      
+
       console.log(`✅ [CONTEXT ITINERARY] Successfully generated ${allDays.length}-day itinerary`);
-      console.log(`📊 Total activities: ${allDays.reduce((sum, day) => 
+      console.log(`📊 Total activities: ${allDays.reduce((sum, day) =>
         sum + day.timeSlots.reduce((s: number, slot: any) => s + slot.activities.length, 0), 0)}`);
-      
+
       return {
         response: formattedResponse,
         itinerary: completeItinerary,
         error: null
       };
-      
+
     } catch (error) {
       console.error('❌ Error generating context itinerary:', error);
       return {

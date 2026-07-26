@@ -52,7 +52,7 @@
  *   - BM25 text search scores are unbounded positive numbers
  *   - Directly comparing or averaging these scores is meaningless
  *
- * Weighted RRF formula: score(d) = Σ (weight_i / (k + rank_i(d)))
+ * Weighted RRF formul  a: score(d) = Σ (weight_i / (k + rank_i(d)))
  *
  * Where:
  *   - k = smoothing constant (default 60, from Cormack et al. 2009)
@@ -230,12 +230,12 @@ export class HybridRetrievalService {
 
     // ── Structured logging ─────────────────────────────────────────────────────
     const totalTimeMs = Date.now() - totalStart;
-    
+
     let vectorOnlyCount = 0;
     let textOnlyCount = 0;
     let overlapCount = 0;
     let totalFusedScore = 0;
-    
+
     fusedResults.forEach(r => {
       if (r.source === 'vector') vectorOnlyCount++;
       else if (r.source === 'text') textOnlyCount++;
@@ -270,7 +270,7 @@ export class HybridRetrievalService {
       `Avg Score: ${metrics.averageFusedScore}, ` +
       `Sources [Vector: ${metrics.vectorOnlyCount} | Text: ${metrics.textOnlyCount} | Both: ${metrics.overlapCount}], ` +
       `Filtered [Dedup: -${metrics.removedByDeduplication} | Threshold: -${metrics.removedByThreshold}], ` +
-      `Final Returned: ${metrics.mergedCount}` + 
+      `Final Returned: ${metrics.mergedCount}` +
       (rerankMetrics.wasReranked ? ` (after reranking)` : '')
     );
 

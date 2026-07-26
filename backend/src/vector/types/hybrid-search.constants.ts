@@ -16,18 +16,14 @@
  * Higher values favor meaning-based retrieval.
  * Range: 0.0 – 1.0
  */
-export const HYBRID_VECTOR_WEIGHT = parseFloat(
-  process.env.HYBRID_VECTOR_WEIGHT || '0.7'
-);
+export const HYBRID_VECTOR_WEIGHT = parseFloat(process.env.HYBRID_VECTOR_WEIGHT!) || 0.7;
 
 /**
  * Weight for keyword/full-text search results in the fusion algorithm.
  * Higher values favor exact keyword matches.
  * Range: 0.0 – 1.0
  */
-export const HYBRID_TEXT_WEIGHT = parseFloat(
-  process.env.HYBRID_TEXT_WEIGHT || '0.3'
-);
+export const HYBRID_TEXT_WEIGHT = parseFloat(process.env.HYBRID_TEXT_WEIGHT!) || 0.3;
 
 // ─── Result Limits ─────────────────────────────────────────────────────────────
 
@@ -35,17 +31,13 @@ export const HYBRID_TEXT_WEIGHT = parseFloat(
  * Number of candidate documents to retrieve from each search system
  * before fusion. Higher values increase recall but add latency.
  */
-export const HYBRID_TOP_K = parseInt(
-  process.env.HYBRID_TOP_K || '20', 10
-);
+export const HYBRID_TOP_K = parseInt(process.env.HYBRID_TOP_K!, 10) || 20;
 
 /**
  * Minimum fused score threshold. Documents below this score
  * are discarded after rank fusion.
  */
-export const HYBRID_MIN_SCORE = parseFloat(
-  process.env.HYBRID_MIN_SCORE || '0.01'
-);
+export const HYBRID_MIN_SCORE = parseFloat(process.env.HYBRID_MIN_SCORE!) || 0.01;
 
 /**
  * Maximum number of results returned after fusion and deduplication.
@@ -69,26 +61,24 @@ export const HYBRID_MAX_RESULTS = parseInt(
  * Lower k → more aggressive (only top results matter)
  * Higher k → more democratic (lower ranks still contribute)
  */
-export const HYBRID_RRF_K = parseInt(
-  process.env.HYBRID_RRF_K || '60', 10
-);
+export const HYBRID_RRF_K = parseInt(process.env.HYBRID_RRF_K!, 10) || 60;
 
 // ─── Text Search Boosts ────────────────────────────────────────────────────────
 
 /** Boost for title matches. Highest priority. */
-export const TITLE_BOOST = parseFloat(process.env.TITLE_BOOST || '3');
+export const TITLE_BOOST = parseFloat(process.env.TITLE_BOOST!) || 3;
 
 /** Boost for content matches. */
-export const CONTENT_BOOST = parseFloat(process.env.CONTENT_BOOST || '1');
+export const CONTENT_BOOST = parseFloat(process.env.CONTENT_BOOST!) || 1;
 
 /** Boost for tag matches. */
-export const TAGS_BOOST = parseFloat(process.env.TAGS_BOOST || '2');
+export const TAGS_BOOST = parseFloat(process.env.TAGS_BOOST!) || 2;
 
 /** Boost for city matches. */
-export const CITY_BOOST = parseFloat(process.env.CITY_BOOST || '2.5');
+export const CITY_BOOST = parseFloat(process.env.CITY_BOOST!) || 2.5;
 
 /** Boost for country matches. */
-export const COUNTRY_BOOST = parseFloat(process.env.COUNTRY_BOOST || '2');
+export const COUNTRY_BOOST = parseFloat(process.env.COUNTRY_BOOST!) || 2;
 
 // ─── Atlas Search Index ────────────────────────────────────────────────────────
 

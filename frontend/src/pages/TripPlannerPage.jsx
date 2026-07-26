@@ -16,9 +16,11 @@ import {
   X,
   Edit2,
   Check,
+  MessageCircle,
 } from "lucide-react";
 import { format, isAfter, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
+import { DashboardChat } from "@/components/Chat/DashboardChat";
 
 const DatePicker = ({ selected, onSelect }) => {
   const today = new Date();
@@ -48,7 +50,7 @@ import {
   apiGetSearchSuggestions,
 } from "@/lib/api";
 
-const DashboardNav = ({ updateTripData }) => {
+const DashboardNav = ({ updateTripData, onToggleChat }) => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
@@ -126,6 +128,14 @@ const DashboardNav = ({ updateTripData }) => {
                 Plan Smarter
               </span>
             </div>
+            
+            <button
+              onClick={onToggleChat}
+              className="ml-4 flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 active:translate-y-0 text-sm font-medium"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span className="hidden sm:inline">AI Assistant</span>
+            </button>
           </div>
 
           <div className="flex-1 max-w-2xl mx-8">
@@ -737,6 +747,7 @@ export default function TripPlannerPage() {
   const navigate = useNavigate();
   const { tripData, updateTripData } = useTrip();
   const [savedTrips, setSavedTrips] = useState([]);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   useEffect(() => {
     const token = getToken();
@@ -778,7 +789,14 @@ export default function TripPlannerPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <DashboardNav updateTripData={updateTripData} />
+      <DashboardNav 
+        updateTripData={updateTripData} 
+        onToggleChat={() => setIsChatOpen(prev => !prev)} 
+      />
+      <DashboardChat 
+        isOpen={isChatOpen} 
+        onClose={() => setIsChatOpen(false)} 
+      />
       <div className="flex">
         <TripPlanningSidebar
           currentStep="destinations"

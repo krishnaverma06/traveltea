@@ -68,7 +68,7 @@ export async function sendMessage(req: Request, res: Response) {
 
     // Get AI response with timeout
     const timeoutPromise = new Promise<any>((_, reject) => {
-      setTimeout(() => reject(new Error('Agent timeout after 30 seconds')), 30000);
+      setTimeout(() => reject(new Error('Agent timeout after 60 seconds')), 60000);
     });
     
     const agentResult  = await Promise.race([
